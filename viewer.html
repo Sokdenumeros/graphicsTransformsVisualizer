@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minimal Three.js Grid & Cube - Orthographic Top View</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+<script>
+  /**
+   * Generates grid line endpoints as Vector4 instances and applies an optional transformation function.
+   * @param {Function} [transformFn] - Function of signature (vec4: THREE.Vector4) => THREE.Vector4
+   * @returns {THREE.Vector4[]} Array of transformed Vector4 endpoints for line segments.
+   */
+  function generateGridPoints(transformFn) {
+    // Default to identity function if no transformation is provided
+    const transform = transformFn || (v => v);
+    const points = [];
+
+    for (let i = -5; i <= 5; i++) {
+      // Horizontal line endpoints: (-5, 0, i, 1) to (5, 0, i, 1)
+      const hStart = new THREE.Vector4(-5, 0, i, 1);
+      const hEnd = new THREE.Vector4(5, 0, i, 1);
+      
+      // Vertical line endpoints: (i, 0, -5, 1) to (i, 0, 5, 1)
+      const vStart = new THREE.Vector4(i, 0, -5, 1);
+      const vEnd = new THREE.Vector4(i, 0, 5, 1);
+
+      // Apply transform function and store results
+      points.push(transform(hStart));
+      points.push(transform(hEnd));
+      points.push(transform(vStart));
+      points.push(transform(vEnd));
+    }
+
+    return points;
+  }
+
+  const scene = new THREE.Scene();
+
+  // Setup Orthographic Camera for a top-down 2D perspective view
+  const aspect = window.innerWidth / window.innerHeight;
+  const frustumSize = 15;
+  const camera = new THREE.OrthographicCamera(
+    (frustumSize * aspect) / -2,
+    (frustumSize * aspect) / 2,
+    frustumSize / 2,
+    frustumSize / -2,
+    0.1,
+    1000
+  );
+  
+  // Position camera directly above looking straight down at (0, 0, 0)
+  camera.position.set(0, 20, 0);
+  camera.lookAt(0, 0, 0);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableRotate = false; // Keep fixed top-down orientation
+  controls.enableZoom = false;    // Allow zooming in/out
+  controls.enablePan = true;     // Allow panning around the scene
+  controls.screenSpacePanning = true;
+
+  const cubeGeometry = new THREE.BoxGeometry(2, 2, 2);
+  const cubeMaterial = new THREE.MeshNormalMaterial();
+  const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+  cube.translateX(10);
+  cube.scale.set(2,1,1);
+  cube.updateMatrixWorld(true);
+  scene.add(cube);
+
+  // This cone will represent the camera position and lookAt direction
+  const cameraGeometry = new THREE.ConeGeometry(1,1,10);
+  cameraGeometry.rotateX(-Math.PI / 2);
+  const cameraMaterial = new THREE.MeshNormalMaterial();
+  const cameraMesh = new THREE.Mesh(cameraGeometry, cameraMaterial);
+  scene.add(cameraMesh);
+  const cwp = cube.position;
+  cameraMesh.lookAt(cwp.x,0,cwp.z+2);
+  cameraMesh.updateMatrixWorld(true);
+
+  // applyMatrix4 multiplies the Vector4 by a 4x4 matrix in-place
+  const applyModelM = (vec) => {return vec.applyMatrix4(cube.matrixWorld);};
+
+  const applyWorldM = (vec) => {return vec;}
+
+  const applyViewM = (vec) => {return vec.applyMatrix4(cameraMesh.matrixWorld);}
+
+  // This camera is only to extract the matrix to transform the grid
+  // Create an Orthographic Camera (left, right, top, bottom, near, far)
+  const orthoCamera = new THREE.OrthographicCamera(-2, 2, 10, -10, 1, 5);
+  orthoCamera.updateProjectionMatrix();
+  const applyOrthoProj = (vec) => {return vec.applyMatrix4(orthoCamera.projectionMatrix);};
+  
+  // This camera is only to extract the matrix to transform the grid
+  // Create a Perspective Camera (fov, aspect, near, far)
+  const perspCamera = new THREE.PerspectiveCamera(60, 1, 1, 5);
+  perspCamera.updateProjectionMatrix();
+  const applyPerspProj = (vec) => {return vec.applyMatrix4(perspCamera.projectionMatrix);};
+  const applyPerspDiv = (vec) => {
+    if (vec.w !== 0) {
+        vec.x /= vec.w;
+        vec.y /= vec.w;
+        vec.z /= vec.w;
+        vec.w = 1.0;
+    }
+    return vec;
+  };
+
+  const applyMat = (vec) =>{
+    var res = vec;
+    res = applyModelM(vec);
+    //res = applyViewM(vec);
+    //res = applyPerspProj(vec);
+    //res = applyPerspDiv(vec);
+    return res;
+  }
+
+
+  // Retrieve Vector4 points using generateGridPoints
+  const vec4Points = generateGridPoints(applyMat);
+  
+  // Separate the points into horizontal (X-aligned) and vertical (Z-aligned) line pairs
+  const xPositions = [];
+  const zPositions = [];
+
+  for (let i = 0; i < vec4Points.length; i += 4) {
+    // Points 0 & 1 of each loop iteration are horizontal lines (along X)
+    xPositions.push(
+        vec4Points[i].x,     vec4Points[i].y,     vec4Points[i].z,
+        vec4Points[i + 1].x, vec4Points[i + 1].y, vec4Points[i + 1].z
+    );
+
+    // Points 2 & 3 of each loop iteration are vertical lines (along Z)
+    zPositions.push(
+        vec4Points[i + 2].x, vec4Points[i + 2].y, vec4Points[i + 2].z,
+        vec4Points[i + 3].x, vec4Points[i + 3].y, vec4Points[i + 3].z
+    );
+  }
+
+  // 1. Red LineSegments for X-aligned lines
+  const xGridGeometry = new THREE.BufferGeometry();
+  xGridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(xPositions, 3));
+  const xGridMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 }); // Red
+  const xGridLines = new THREE.LineSegments(xGridGeometry, xGridMaterial);
+  scene.add(xGridLines);
+
+  // 2. Blue LineSegments for Z-aligned lines
+  const zGridGeometry = new THREE.BufferGeometry();
+  zGridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(zPositions, 3));
+  const zGridMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff }); // Blue
+  const zGridLines = new THREE.LineSegments(zGridGeometry, zGridMaterial);
+  scene.add(zGridLines);
+
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  window.onload = function() {
+    animate();
+  };
+
+  window.addEventListener('resize', () => {
+    const newAspect = window.innerWidth / window.innerHeight;
+    camera.left = (frustumSize * newAspect) / -2;
+    camera.right = (frustumSize * newAspect) / 2;
+    camera.top = frustumSize / 2;
+    camera.bottom = frustumSize / -2;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+</script>
+
+</body>
+</html>

@@ -31,7 +31,7 @@
     const transform = transformFn || (v => v);
     const points = [];
 
-    for (let i = -5; i <= 5; i++) {
+    for (let i = -5; i <= 4; i++) {
       // Horizontal line endpoints: (-5, 0, i, 1) to (5, 0, i, 1)
       const hStart = new THREE.Vector4(-5, 0, i, 1);
       const hEnd = new THREE.Vector4(5, 0, i, 1);
@@ -74,7 +74,7 @@
 
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableRotate = false; // Keep fixed top-down orientation
-  controls.enableZoom = false;    // Allow zooming in/out
+  controls.enableZoom = true;    // Allow zooming in/out
   controls.enablePan = true;     // Allow panning around the scene
   controls.screenSpacePanning = true;
 
@@ -95,13 +95,14 @@
   const cwp = cube.position;
   cameraMesh.lookAt(cwp.x,0,cwp.z+2);
   cameraMesh.updateMatrixWorld(true);
+  const v = cameraMesh.matrixWorld.clone();
 
   // applyMatrix4 multiplies the Vector4 by a 4x4 matrix in-place
   const applyModelM = (vec) => {return vec.applyMatrix4(cube.matrixWorld);};
 
   const applyWorldM = (vec) => {return vec;}
 
-  const applyViewM = (vec) => {return vec.applyMatrix4(cameraMesh.matrixWorld);}
+  const applyViewM = (vec) => {return vec.applyMatrix4(v);}
 
   // This camera is only to extract the matrix to transform the grid
   // Create an Orthographic Camera (left, right, top, bottom, near, far)
@@ -113,12 +114,14 @@
   // Create a Perspective Camera (fov, aspect, near, far)
   const perspCamera = new THREE.PerspectiveCamera(60, 1, 1, 5);
   perspCamera.updateProjectionMatrix();
-  const applyPerspProj = (vec) => {return vec.applyMatrix4(perspCamera.projectionMatrix);};
+  const p = perspCamera.projectionMatrix.clone();
+  p.invert();
+  const applyPerspProj = (vec) => {return vec.applyMatrix4(p);};
   const applyPerspDiv = (vec) => {
     if (vec.w !== 0) {
-        vec.x /= vec.w;
-        vec.y /= vec.w;
-        vec.z /= vec.w;
+        vec.x *= vec.w;
+        vec.y *= vec.w;
+        vec.z *= vec.w;
         vec.w = 1.0;
     }
     return vec;
@@ -126,10 +129,10 @@
 
   const applyMat = (vec) =>{
     var res = vec;
-    res = applyModelM(vec);
-    //res = applyViewM(vec);
+    //res = applyModelM(vec);
     //res = applyPerspProj(vec);
-    //res = applyPerspDiv(vec);
+    res = applyPerspDiv(vec);
+    res = applyViewM(vec);
     return res;
   }
 

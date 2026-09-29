@@ -31,14 +31,15 @@
     const transform = transformFn || (v => v);
     const points = [];
 
-    for (let i = -5; i <= 4; i++) {
+    offset = 0
+    for (let i = -5+offset; i <= 4+offset; i++) {
       // Horizontal line endpoints: (-5, 0, i, 1) to (5, 0, i, 1)
-      const hStart = new THREE.Vector4(-5, 0, i, 1);
-      const hEnd = new THREE.Vector4(5, 0, i, 1);
+      const hStart = new THREE.Vector4(-5+offset, 0, i, 1);
+      const hEnd = new THREE.Vector4(5+offset, 0, i, 1);
       
       // Vertical line endpoints: (i, 0, -5, 1) to (i, 0, 5, 1)
-      const vStart = new THREE.Vector4(i, 0, -5, 1);
-      const vEnd = new THREE.Vector4(i, 0, 5, 1);
+      const vStart = new THREE.Vector4(i, 0, -5+offset, 1);
+      const vEnd = new THREE.Vector4(i, 0, 5+offset, 1);
 
       // Apply transform function and store results
       points.push(transform(hStart));
@@ -92,10 +93,18 @@
   const cameraMaterial = new THREE.MeshNormalMaterial();
   const cameraMesh = new THREE.Mesh(cameraGeometry, cameraMaterial);
   scene.add(cameraMesh);
+  // cameraMesh.scale.set(0.1,0.1,0.1);
+  cameraMesh.visible = true;
   const cwp = cube.position;
   cameraMesh.lookAt(cwp.x,0,cwp.z+2);
   cameraMesh.updateMatrixWorld(true);
-  const v = cameraMesh.matrixWorld.clone();
+  const perspCamera2 = new THREE.PerspectiveCamera(60, 1, 1, 5);
+  scene.add(perspCamera2);
+  perspCamera2.lookAt(cwp.x,0,cwp.z+2);
+  perspCamera2.updateMatrixWorld();
+  const v = perspCamera2.matrixWorld.clone();
+  cameraMesh.visible = true;
+
 
   // applyMatrix4 multiplies the Vector4 by a 4x4 matrix in-place
   const applyModelM = (vec) => {return vec.applyMatrix4(cube.matrixWorld);};
@@ -129,8 +138,8 @@
 
   const applyMat = (vec) =>{
     var res = vec;
-    //res = applyModelM(vec);
-    //res = applyPerspProj(vec);
+    // res = applyModelM(vec);
+    res = applyPerspProj(vec);
     res = applyPerspDiv(vec);
     res = applyViewM(vec);
     return res;

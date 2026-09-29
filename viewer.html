@@ -26,20 +26,26 @@
    * @param {Function} [transformFn] - Function of signature (vec4: THREE.Vector4) => THREE.Vector4
    * @returns {THREE.Vector4[]} Array of transformed Vector4 endpoints for line segments.
    */
+  // Grid spans [-size, size] (the NDC cube when size = 1); the last line (i = size) is skipped to mark the positive side
+  const offset = 0;
+  const size = 10;
+  const divisions = 2 * size; // one line per unit
+  const gridValue = (k) => parseFloat((-size + offset + (2 * size * k) / divisions).toFixed(3));
+
   function generateGridPoints(transformFn) {
     // Default to identity function if no transformation is provided
     const transform = transformFn || (v => v);
     const points = [];
 
-    offset = 0
-    for (let i = -5+offset; i <= 4+offset; i++) {
-      // Horizontal line endpoints: (-5, 0, i, 1) to (5, 0, i, 1)
-      const hStart = new THREE.Vector4(-5+offset, 0, i, 1);
-      const hEnd = new THREE.Vector4(5+offset, 0, i, 1);
-      
-      // Vertical line endpoints: (i, 0, -5, 1) to (i, 0, 5, 1)
-      const vStart = new THREE.Vector4(i, 0, -5+offset, 1);
-      const vEnd = new THREE.Vector4(i, 0, 5+offset, 1);
+    for (let k = 0; k < divisions; k++) {
+      const i = gridValue(k);
+      // Horizontal line endpoints: (-size, 0, i, 1) to (size, 0, i, 1)
+      const hStart = new THREE.Vector4(-size+offset, 0, i, 1);
+      const hEnd = new THREE.Vector4(size+offset, 0, i, 1);
+
+      // Vertical line endpoints: (i, 0, -size, 1) to (i, 0, size, 1)
+      const vStart = new THREE.Vector4(i, 0, -size+offset, 1);
+      const vEnd = new THREE.Vector4(i, 0, size+offset, 1);
 
       // Apply transform function and store results
       points.push(transform(hStart));
@@ -49,6 +55,29 @@
     }
 
     return points;
+  }
+
+  /**
+   * Blue (Z-aligned) lines are sampled at every grid value instead of only at their two ends, so the piece
+   * that crosses w = 0 (the point at infinity) can be left out instead of being drawn straight through the camera.
+   * @returns {number[]} Flat xyz positions for LineSegments.
+   */
+  function generateZLineSegments(transformFn) {
+    const positions = [];
+    for (let k = 0; k < divisions; k++) {
+      const x = gridValue(k);
+      let prev = null;
+      for (let j = 0; j <= divisions; j++) {
+        const z = j < divisions ? gridValue(j) : size + offset;
+        const cur = transformFn(new THREE.Vector4(x, 0, z, 1));
+        // Consecutive samples on opposite sides of w = 0 are on opposite sides of infinity: don't join them
+        if (prev && prev.wSign === cur.wSign) {
+          positions.push(prev.x, prev.y, prev.z, cur.x, cur.y, cur.z);
+        }
+        prev = cur;
+      }
+    }
+    return positions;
   }
 
   const scene = new THREE.Scene();
@@ -127,10 +156,12 @@
   p.invert();
   const applyPerspProj = (vec) => {return vec.applyMatrix4(p);};
   const applyPerspDiv = (vec) => {
+    // Remember which side of w = 0 the point was on (w < 0 means it ends up behind the camera)
+    vec.wSign = Math.sign(vec.w);
     if (vec.w !== 0) {
-        vec.x *= vec.w;
-        vec.y *= vec.w;
-        vec.z *= vec.w;
+        vec.x /= vec.w;
+        vec.y /= vec.w;
+        vec.z /= vec.w;
         vec.w = 1.0;
     }
     return vec;
@@ -139,8 +170,8 @@
   const applyMat = (vec) =>{
     var res = vec;
     // res = applyModelM(vec);
-    res = applyPerspProj(vec);
-    res = applyPerspDiv(vec);
+    // res = applyPerspProj(vec);
+    // res = applyPerspDiv(vec);
     res = applyViewM(vec);
     return res;
   }
@@ -149,21 +180,15 @@
   // Retrieve Vector4 points using generateGridPoints
   const vec4Points = generateGridPoints(applyMat);
   
-  // Separate the points into horizontal (X-aligned) and vertical (Z-aligned) line pairs
+  // Horizontal (X-aligned) lines come from the endpoint pairs; vertical (Z-aligned) lines are sampled separately
   const xPositions = [];
-  const zPositions = [];
+  const zPositions = generateZLineSegments(applyMat);
 
   for (let i = 0; i < vec4Points.length; i += 4) {
     // Points 0 & 1 of each loop iteration are horizontal lines (along X)
     xPositions.push(
         vec4Points[i].x,     vec4Points[i].y,     vec4Points[i].z,
         vec4Points[i + 1].x, vec4Points[i + 1].y, vec4Points[i + 1].z
-    );
-
-    // Points 2 & 3 of each loop iteration are vertical lines (along Z)
-    zPositions.push(
-        vec4Points[i + 2].x, vec4Points[i + 2].y, vec4Points[i + 2].z,
-        vec4Points[i + 3].x, vec4Points[i + 3].y, vec4Points[i + 3].z
     );
   }
 
@@ -180,6 +205,33 @@
   const zGridMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff }); // Blue
   const zGridLines = new THREE.LineSegments(zGridGeometry, zGridMaterial);
   scene.add(zGridLines);
+
+  // Text sprite drawn on top of everything, used to label each grid line with its original (untransformed) value
+  function makeLabel(text, color, position) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.font = 'bold 40px sans-serif';
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 128, 32);
+    const material = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), depthTest: false });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(1.6, 0.4, 1);
+    sprite.position.set(position.x, position.y, position.z);
+    sprite.renderOrder = 1;
+    scene.add(sprite);
+  }
+
+  // Labels show the original (x, z) of the endpoint, drawn where that endpoint ends up after the transform.
+  // Red lines are labelled at their +x end, blue lines at their -z end
+  for (let i = 0; i < vec4Points.length; i += 4) {
+    const value = gridValue(i / 4);
+    makeLabel(`(${size + offset}, ${value})`, '#ff6666', vec4Points[i + 1]);
+    makeLabel(`(${value}, ${-size + offset})`, '#6699ff', vec4Points[i + 2]);
+  }
 
   function animate() {
     requestAnimationFrame(animate);

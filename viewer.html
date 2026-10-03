@@ -3,83 +3,107 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Minimal Three.js Grid & Cube - Orthographic Top View</title>
+  <title>Three.js Coordinate Spaces Visualization</title>
   <style>
     body {
       margin: 0;
       overflow: hidden;
+      font-family: sans-serif;
+      background-color: #111;
+      color: #fff;
     }
     canvas {
       width: 100vw;
       height: 100vh;
       display: block;
     }
+    #ui-panel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      pointer-events: auto;
+      z-index: 100;
+    }
+    .ui-row {
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    label { cursor: pointer; }
+    input[type="number"] {
+      width: 60px;
+      background: #333;
+      color: #fff;
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 2px 5px;
+    }
+    select {
+      background: #333;
+      color: #fff;
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 2px 5px;
+    }
+    hr { border-color: #444; }
   </style>
+  
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
 </head>
 <body>
 
+<div id="ui-panel">
+  <h3>Grid params</h3>
+  //TODO update how grids are built
+  <div class="ui-row">
+    Grid Size: <input type="number" id="size" value="10" min="1"> 
+  </div>
+  <div class="ui-row">
+    Grid X offset: <input type="number" id="xoffset" value="0"> 
+  </div>
+  <div class="ui-row">
+    Grid Y offset: <input type="number" id="yoffset" value="0"> 
+  </div>
+  <div class="ui-row">
+    Grid Step: <input type="number" id="step" value="1" min="1"> 
+  </div>
+  <hr>
+  <h3>Camera params</h3>
+  // TODO, make modifiable near, far proj/ortho, lookat.
+  <hr>
+  <h3>Coordinate Spaces</h3>
+  <div class="ui-row"><label><input type="checkbox" id="show-object" checked> Object Space</label></div>
+  <div class="ui-row"><label><input type="checkbox" id="show-world" checked> World Space</label></div>
+  <div class="ui-row"><label><input type="checkbox" id="show-eye"> Eye (View) Space</label></div>
+  <div class="ui-row"><label><input type="checkbox" id="show-clip"> Clip Space</label></div>
+  <div class="ui-row"><label><input type="checkbox" id="show-ndc"> NDC</label></div>
+  <div class="ui-row"><label><input type="checkbox" id="show-window"> Window Space</label></div>
+  <div class="ui-row">
+    Num Pixels: <input type="number" id="winW" value="10" min="1"> 
+  </div>
+  
+  <hr>
+  <h3>Element Visibility</h3>
+  <div class="ui-row"><label><input type="checkbox" id="show-frustum" checked> View Frustum (World)</label></div>
+  <div class="ui-row"><label><input type="checkbox" id="show-camera" checked> Show camera</label></div>
+  <div class="ui-row"><label><input type="checkbox" id="show-cube" checked> Show object</label></div>
+</div>
+
 <script>
-  /**
-   * Generates grid line endpoints as Vector4 instances and applies an optional transformation function.
-   * @param {Function} [transformFn] - Function of signature (vec4: THREE.Vector4) => THREE.Vector4
-   * @returns {THREE.Vector4[]} Array of transformed Vector4 endpoints for line segments.
-   */
-  // Grid spans [-size, size] (the NDC cube when size = 1); the last line (i = size) is skipped to mark the positive side
-  const offset = 0;
-  const size = 10;
-  const divisions = 2 * size; // one line per unit
-  const gridValue = (k) => parseFloat((-size + offset + (2 * size * k) / divisions).toFixed(3));
+  // TODO update to a newer threejs, transform controls and orbitControls versions.
+  function remove(obj) {
+    //TODO properly obj.dispose();
+    obj.parent.remove(obj);
+  } 
 
-  function generateGridPoints(transformFn) {
-    // Default to identity function if no transformation is provided
-    const transform = transformFn || (v => v);
-    const points = [];
-
-    for (let k = 0; k < divisions; k++) {
-      const i = gridValue(k);
-      // Horizontal line endpoints: (-size, 0, i, 1) to (size, 0, i, 1)
-      const hStart = new THREE.Vector4(-size+offset, 0, i, 1);
-      const hEnd = new THREE.Vector4(size+offset, 0, i, 1);
-
-      // Vertical line endpoints: (i, 0, -size, 1) to (i, 0, size, 1)
-      const vStart = new THREE.Vector4(i, 0, -size+offset, 1);
-      const vEnd = new THREE.Vector4(i, 0, size+offset, 1);
-
-      // Apply transform function and store results
-      points.push(transform(hStart));
-      points.push(transform(hEnd));
-      points.push(transform(vStart));
-      points.push(transform(vEnd));
-    }
-
-    return points;
-  }
-
-  /**
-   * Blue (Z-aligned) lines are sampled at every grid value instead of only at their two ends, so the piece
-   * that crosses w = 0 (the point at infinity) can be left out instead of being drawn straight through the camera.
-   * @returns {number[]} Flat xyz positions for LineSegments.
-   */
-  function generateZLineSegments(transformFn) {
-    const positions = [];
-    for (let k = 0; k < divisions; k++) {
-      const x = gridValue(k);
-      let prev = null;
-      for (let j = 0; j <= divisions; j++) {
-        const z = j < divisions ? gridValue(j) : size + offset;
-        const cur = transformFn(new THREE.Vector4(x, 0, z, 1));
-        // Consecutive samples on opposite sides of w = 0 are on opposite sides of infinity: don't join them
-        if (prev && prev.wSign === cur.wSign) {
-          positions.push(prev.x, prev.y, prev.z, cur.x, cur.y, cur.z);
-        }
-        prev = cur;
-      }
-    }
-    return positions;
-  }
-
+  // -------------------------------------- INIT CAMERA - SCENE - RENDERER --------------------------------------
   const scene = new THREE.Scene();
 
   // Setup Orthographic Camera for a top-down 2D perspective view
@@ -108,53 +132,37 @@
   controls.enablePan = true;     // Allow panning around the scene
   controls.screenSpacePanning = true;
 
+
+  // -------------------------------------- INIT CUBE --------------------------------------
   const cubeGeometry = new THREE.BoxGeometry(2, 2, 2);
   const cubeMaterial = new THREE.MeshNormalMaterial();
   const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+  cube.name = "cube";
   cube.translateX(10);
   cube.scale.set(2,1,1);
-  cube.updateMatrixWorld(true);
   scene.add(cube);
 
-  // This cone will represent the camera position and lookAt direction
+  // -------------------------------------- INIT CONE --------------------------------------
+  const lookAtPos = new THREE.Vector3(10,0,10);
+
   const cameraGeometry = new THREE.ConeGeometry(1,1,10);
   cameraGeometry.rotateX(-Math.PI / 2);
   const cameraMaterial = new THREE.MeshNormalMaterial();
   const cameraMesh = new THREE.Mesh(cameraGeometry, cameraMaterial);
+  cameraMesh.name = "cameraCone";
   scene.add(cameraMesh);
-  // cameraMesh.scale.set(0.1,0.1,0.1);
-  cameraMesh.visible = true;
-  const cwp = cube.position;
-  cameraMesh.lookAt(cwp.x,0,cwp.z+2);
+  cameraMesh.lookAt(lookAtPos.x ,0,lookAtPos.z);
   cameraMesh.updateMatrixWorld(true);
-  const perspCamera2 = new THREE.PerspectiveCamera(60, 1, 1, 5);
-  scene.add(perspCamera2);
-  perspCamera2.lookAt(cwp.x,0,cwp.z+2);
-  perspCamera2.updateMatrixWorld();
-  const v = perspCamera2.matrixWorld.clone();
-  cameraMesh.visible = true;
 
+  // THIS CAMERA IS NOT THE ONE USED FOR RENDERING ONLY TO EXTRACT THE VIEW AND PROJECTION MATRICES
 
-  // applyMatrix4 multiplies the Vector4 by a 4x4 matrix in-place
-  const applyModelM = (vec) => {return vec.applyMatrix4(cube.matrixWorld);};
+  // const orthoCamera = new THREE.OrthographicCamera(-2, 2, 10, -10, 1, 5);  // (left, right, top, bottom, near, far)
+  var c = new THREE.PerspectiveCamera(60, 1, 1, 5); // (fov, aspect, near, far)
+  c.name = "matrixCamera";
+  scene.add(c);
+  c.lookAt(lookAtPos.x ,0,lookAtPos.z);
 
-  const applyWorldM = (vec) => {return vec;}
-
-  const applyViewM = (vec) => {return vec.applyMatrix4(v);}
-
-  // This camera is only to extract the matrix to transform the grid
-  // Create an Orthographic Camera (left, right, top, bottom, near, far)
-  const orthoCamera = new THREE.OrthographicCamera(-2, 2, 10, -10, 1, 5);
-  orthoCamera.updateProjectionMatrix();
-  const applyOrthoProj = (vec) => {return vec.applyMatrix4(orthoCamera.projectionMatrix);};
-  
-  // This camera is only to extract the matrix to transform the grid
-  // Create a Perspective Camera (fov, aspect, near, far)
-  const perspCamera = new THREE.PerspectiveCamera(60, 1, 1, 5);
-  perspCamera.updateProjectionMatrix();
-  const p = perspCamera.projectionMatrix.clone();
-  p.invert();
-  const applyPerspProj = (vec) => {return vec.applyMatrix4(p);};
+  // -------------------------------------- DEFINE TRANSFORMS --------------------------------------
   const applyPerspDiv = (vec) => {
     // Remember which side of w = 0 the point was on (w < 0 means it ends up behind the camera)
     vec.wSign = Math.sign(vec.w);
@@ -167,47 +175,102 @@
     return vec;
   };
 
-  const applyMat = (vec) =>{
-    var res = vec;
-    // res = applyModelM(vec);
-    // res = applyPerspProj(vec);
-    // res = applyPerspDiv(vec);
-    res = applyViewM(vec);
+  // 1 model, 2 world, 3 view, 4 clip, 5 NDC, 6 window
+  const applyMat = (vec, space) =>{
+    var res = vec.clone();
+
+    // Model to world
+    if (space == 1) {
+      const cub = scene.getObjectByName("cube");
+      cub.updateMatrixWorld(true);
+      return res.applyMatrix4(cub.matrixWorld);
+    }
+    
+    // Window to NDC
+    if (space > 5) {
+      var nPixels = document.getElementById('winW').value;
+      res.x = (res.x / nPixels) * 2 - 1;
+      res.z = res.z * 2 - 1;
+    }
+
+    const cam = scene.getObjectByName("matrixCamera");
+    if(!cam) return res;
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
+    const viewInverse = c.matrixWorld.clone();
+    const projInverse = c.projectionMatrix.clone().invert();
+  
+    // NDC to view
+    if (space > 4) res.applyMatrix4(projInverse);
+    if (space > 4) res = applyPerspDiv(res);
+
+    // View to world
+    if (space > 2) res.applyMatrix4(viewInverse);
+
     return res;
   }
 
+  // -------------------------------------- GRIDS --------------------------------------
+  /**
+   * Generates grid line endpoints as Vector4 instances and applies an optional transformation function.
+   * @param {Function} [transformFn] - Function of signature (vec4: THREE.Vector4) => THREE.Vector4
+   * @returns {THREE.Vector4[]} Array of transformed Vector4 endpoints for line segments.
+   */
+  // Grid spans [-size, size] (the NDC cube when size = 1); the last line (i = size) is skipped to mark the positive side
+  function generateGridPoints(size, offset, space) {
+    // Default to identity function if no transformation is provided
+    const points = [];
+    const divisions = size*2;
+    const gridValue = (k) => parseFloat((-size + offset + (2 * size * k) / divisions).toFixed(3));
+    for (let k = 0; k < divisions; k++) {
+      const i = gridValue(k);
+      // Horizontal line endpoints: (-size, 0, i, 1) to (size, 0, i, 1)
+      const hStart = new THREE.Vector4(-size+offset, 0, i, 1);
+      const hEnd = new THREE.Vector4(size+offset, 0, i, 1);
 
-  // Retrieve Vector4 points using generateGridPoints
-  const vec4Points = generateGridPoints(applyMat);
-  
-  // Horizontal (X-aligned) lines come from the endpoint pairs; vertical (Z-aligned) lines are sampled separately
-  const xPositions = [];
-  const zPositions = generateZLineSegments(applyMat);
+      // Vertical line endpoints: (i, 0, -size, 1) to (i, 0, size, 1)
+      const vStart = new THREE.Vector4(i, 0, -size+offset, 1);
+      const vEnd = new THREE.Vector4(i, 0, size+offset, 1);
 
-  for (let i = 0; i < vec4Points.length; i += 4) {
-    // Points 0 & 1 of each loop iteration are horizontal lines (along X)
-    xPositions.push(
-        vec4Points[i].x,     vec4Points[i].y,     vec4Points[i].z,
-        vec4Points[i + 1].x, vec4Points[i + 1].y, vec4Points[i + 1].z
-    );
+      // Apply transform function and store results
+      points.push(applyMat(hStart,space));
+      points.push(applyMat(hEnd,space));
+      points.push(applyMat(vStart,space));
+      points.push(applyMat(vEnd,space));
+    }
+
+    return points;
   }
 
-  // 1. Red LineSegments for X-aligned lines
-  const xGridGeometry = new THREE.BufferGeometry();
-  xGridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(xPositions, 3));
-  const xGridMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 }); // Red
-  const xGridLines = new THREE.LineSegments(xGridGeometry, xGridMaterial);
-  scene.add(xGridLines);
+  /**
+   * Blue (Z-aligned) lines are sampled at every grid value instead of only at their two ends, so the piece
+   * that crosses w = 0 (the point at infinity) can be left out instead of being drawn straight through the camera.
+   * @returns {number[]} Flat xyz positions for LineSegments.
+   */
+  function generateZLineSegments(size, offset, space) {
+    const positions = [];
+    const divisions = size *2;
+    const gridValue = (k) => parseFloat((-size + offset + (2 * size * k) / divisions).toFixed(3));
 
-  // 2. Blue LineSegments for Z-aligned lines
-  const zGridGeometry = new THREE.BufferGeometry();
-  zGridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(zPositions, 3));
-  const zGridMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff }); // Blue
-  const zGridLines = new THREE.LineSegments(zGridGeometry, zGridMaterial);
-  scene.add(zGridLines);
+    for (let k = 0; k < divisions; k++) {
+      const x = gridValue(k);
+      let prev = null;
+      for (let j = 0; j <= divisions; j++) {
+        const z = j < divisions ? gridValue(j) : size + offset;
+        const cur = applyMat(new THREE.Vector4(x, 0, z, 1),space);
+        // Consecutive samples on opposite sides of w = 0 are on opposite sides of infinity: don't join them
+        if (prev && prev.wSign === cur.wSign) {
+          positions.push(prev.x, prev.y, prev.z, cur.x, cur.y, cur.z);
+        }
+        prev = cur;
+      }
+    }
+    return positions;
+  }
 
+  // ------------------------------------- LABELS ------------------------------------------
   // Text sprite drawn on top of everything, used to label each grid line with its original (untransformed) value
-  function makeLabel(text, color, position) {
+  function makeLabel(text, color, position, group) {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 64;
@@ -222,17 +285,204 @@
     sprite.scale.set(1.6, 0.4, 1);
     sprite.position.set(position.x, position.y, position.z);
     sprite.renderOrder = 1;
-    scene.add(sprite);
+    group.add(sprite);
   }
 
-  // Labels show the original (x, z) of the endpoint, drawn where that endpoint ends up after the transform.
-  // Red lines are labelled at their +x end, blue lines at their -z end
-  for (let i = 0; i < vec4Points.length; i += 4) {
-    const value = gridValue(i / 4);
-    makeLabel(`(${size + offset}, ${value})`, '#ff6666', vec4Points[i + 1]);
-    makeLabel(`(${value}, ${-size + offset})`, '#6699ff', vec4Points[i + 2]);
+function generateFrustum() {
+    const vectors = [];
+
+    // Helper to push transformed coordinates flattened
+    const addSegment = (v1, v2) => {
+      const p1 = applyMat(v1, 5);
+      const p2 = applyMat(v2, 5);
+      vectors.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+    };
+
+    // Bottom square (y = -1)
+    addSegment(new THREE.Vector4(-1, 0, -1, 1), new THREE.Vector4(1, 0, -1, 1));
+    addSegment(new THREE.Vector4(1, 0, -1, 1),  new THREE.Vector4(1, 0, 1, 1));
+    addSegment(new THREE.Vector4(1, 0, 1, 1),   new THREE.Vector4(-1, 0, 1, 1));
+    addSegment(new THREE.Vector4(-1, 0, 1, 1),  new THREE.Vector4(-1, 0, -1, 1));
+
+    const frustumGeom = new THREE.BufferGeometry();
+    frustumGeom.setAttribute('position', new THREE.Float32BufferAttribute(vectors, 3));
+    
+    const frustumMaterial = new THREE.LineBasicMaterial({ color: 0xffff00 }); // Yellow
+    const frustum = new THREE.LineSegments(frustumGeom, frustumMaterial);
+    frustum.name = "frustum";
+    frustum.translateY(1); // offset so they don't overlap with grids
+    return frustum;
   }
 
+  function generateGrid(space, offset, size){
+    const g = new THREE.Group();
+    const divisions = 2 * size; // one line per unit
+    const gridValue = (k) => parseFloat((-size + offset + (2 * size * k) / divisions).toFixed(3));
+
+    // Retrieve Vector4 points using generateGridPoints
+    const vec4Points = generateGridPoints(size,offset,space);
+    
+    // Horizontal (X-aligned) lines come from the endpoint pairs; vertical (Z-aligned) lines are sampled separately
+    const xPositions = [];
+    const zPositions = generateZLineSegments(size,offset,space);
+
+    for (let i = 0; i < vec4Points.length; i += 4) {
+      // Points 0 & 1 of each loop iteration are horizontal lines (along X)
+      xPositions.push(
+          vec4Points[i].x,     vec4Points[i].y,     vec4Points[i].z,
+          vec4Points[i + 1].x, vec4Points[i + 1].y, vec4Points[i + 1].z
+      );
+    }
+
+    // 1. Red LineSegments for X-aligned lines
+    const xGridGeometry = new THREE.BufferGeometry();
+    xGridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(xPositions, 3));
+    const xGridMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 }); // Red
+    const xGridLines = new THREE.LineSegments(xGridGeometry, xGridMaterial);
+    g.add(xGridLines);
+
+    // 2. Blue LineSegments for Z-aligned lines
+    const zGridGeometry = new THREE.BufferGeometry();
+    zGridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(zPositions, 3));
+    const zGridMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff }); // Blue
+    const zGridLines = new THREE.LineSegments(zGridGeometry, zGridMaterial);
+    g.add(zGridLines);
+
+    // Labels show the original (x, z) of the endpoint, drawn where that endpoint ends up after the transform.
+    // Red lines are labelled at their +x end, blue lines at their -z end
+    for (let i = 0; i < vec4Points.length; i += 4) {
+      const value = gridValue(i / 4);
+      makeLabel(`(${size + offset}, ${value})`, '#ff6666', vec4Points[i + 1],g);
+      makeLabel(`(${value}, ${-size + offset})`, '#6699ff', vec4Points[i + 2],g);
+    }
+    g.name = space.toString();
+
+    return g;
+  }
+
+  function resetGrid(space,offset,size){
+    const newGrid = generateGrid(space, offset,size);
+    const oldGrid = scene.getObjectByName(space.toString());
+    if (oldGrid) {
+      newGrid.visible = oldGrid.visible;
+      remove(oldGrid);
+    }
+    scene.add(newGrid);
+  }
+
+  function rebuildLines(offset,size){
+    // Add model space grid
+    resetGrid(1,offset,size);
+
+    // Add world space grid
+    resetGrid(2, offset,size);
+
+    // Add view space grid
+    resetGrid(3, offset,size);
+
+    // Add NDC grid
+    resetGrid(5, offset,size);
+
+    // Add window space grid
+    resetGrid(6, offset,size);
+
+    const oldFrustum = scene.getObjectByName("frustum");
+    if (oldFrustum) remove(oldFrustum);
+    scene.add(generateFrustum());
+  }
+  
+  // Add events for grid definers
+  const gridDefiners = ["size","xoffset","yoffset","step"];
+  gridDefiners.forEach((id) => {
+    const input = document.getElementById(id);
+    input.addEventListener('input', (e) => {
+      console.log("changed");
+      const offset = parseFloat(document.getElementById('xoffset').value);
+      const size = parseFloat(document.getElementById('size').value);
+      rebuildLines(offset,size);
+    });
+  });
+
+  const offset = parseFloat(document.getElementById('xoffset').value);
+  const size = parseFloat(document.getElementById('size').value);
+  rebuildLines(offset,size);
+
+
+  // Listen directly to user input changes
+  document.getElementById('winW').addEventListener('input', (e) => {
+    const newWidth = parseFloat(e.target.value);
+    if (!isNaN(newWidth) && newWidth > 0) {
+      const offset = parseFloat(document.getElementById('xoffset').value);
+      const size = parseFloat(document.getElementById('size').value);
+      resetGrid(6,offset,size);
+    }
+  });
+  
+  // Visibility events
+  const visibilityMap = {
+    'show-object': '1',
+    'show-world':  '2',
+    'show-eye':    '3',
+    'show-ndc':    '5',
+    'show-window': '6',
+    'show-camera': 'cameraCone',
+    'show-frustum': 'frustum',
+    'show-cube': 'cube'
+  };
+
+  // Listen to all grid visibility toggles
+  Object.entries(visibilityMap).forEach(([id, objectName]) => {
+    const checkbox = document.getElementById(id);
+    checkbox.addEventListener('change', (e) => {
+      const obj = scene.getObjectByName(objectName);
+      if (obj) obj.visible = e.target.checked;
+    });
+    checkbox.dispatchEvent(new Event('change'));
+  });
+
+  // TODO: WIP
+  // const raycaster = new THREE.Raycaster();
+  // const mouse = new THREE.Vector2();
+  // window.addEventListener('pointerdown', (event) => {
+  //   // 1. Convert mouse click coordinates to Normalized Device Coordinates (-1 to +1)
+  //   const rect = renderer.domElement.getBoundingClientRect();
+  //   mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  //   mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  //   // 2. Set up the raycaster using the camera and mouse position
+  //   raycaster.setFromCamera(mouse, camera);
+
+  //   // 3. Get the cube from the scene
+  //   const cubeObj = scene.getObjectByName("cube");
+  //   if (!cubeObj) return;
+
+  //   // 4. Check for intersections (true checks descendants as well)
+  //   const intersects = raycaster.intersectObject(cubeObj, true);
+
+  //   if (intersects.length > 0) {
+  //     var tc = scene.getObjectByName("cubeTc");
+  //     if(tc){
+  //       if(tc.mode == 'translate'){
+  //         tc.setMode('scale');
+  //         tc.showY = false;
+  //       } else if(tc.mode == 'scale'){
+  //         tc.setMode('rotate');
+  //         tc.showY = false;
+  //       } else if(tc.mode == 'rotate'){
+  //         tc.detach();
+  //         tc.parent.remove(tc);
+  //       }
+  //     }
+  //     tc = new THREE.TransformControls(camera, renderer.domElement);
+  //     tc.name = "cubeTc";
+  //     tc.attach(cubeObj);
+  //     tc.showY = false;
+  //     scene.add(tc);
+  //   }
+  // });
+
+
+  // ----------- OTHER STUFF ---------------
   function animate() {
     requestAnimationFrame(animate);
     controls.update();

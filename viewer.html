@@ -72,7 +72,7 @@
     Grid Y offset: <input type="number" id="yoffset" value="0"> 
   </div>
   <div class="ui-row">
-    Grid Step: <input type="number" id="step" value="1" min="1"> 
+    Divisions: <input type="number" id="divisions" value="1" min="1"> 
   </div>
   <hr>
   <h3>Camera params</h3>
@@ -197,12 +197,13 @@
     if(!cam) return res;
     cam.updateProjectionMatrix();
     cam.updateMatrixWorld();
-    const viewInverse = c.matrixWorld.clone();
-    const projInverse = c.projectionMatrix.clone().invert();
+    const viewInverse = cam.matrixWorld.clone();
+    const projInverse = cam.projectionMatrix.clone().invert();
   
     // NDC to view
     if (space > 4) res.applyMatrix4(projInverse);
     if (space > 4) res = applyPerspDiv(res);
+    if (space == 4) res.applyMatrix4(cam.projectionMatrix);
 
     // View to world
     if (space > 2) res.applyMatrix4(viewInverse);
@@ -217,10 +218,9 @@
    * @returns {THREE.Vector4[]} Array of transformed Vector4 endpoints for line segments.
    */
   // Grid spans [-size, size] (the NDC cube when size = 1); the last line (i = size) is skipped to mark the positive side
-  function generateGridPoints(size, offset, space) {
+  function generateGridPoints(size, offset, space, divisions) {
     // Default to identity function if no transformation is provided
     const points = [];
-    const divisions = size*2;
     const gridValue = (k) => parseFloat((-size + offset + (2 * size * k) / divisions).toFixed(3));
     for (let k = 0; k < divisions; k++) {
       const i = gridValue(k);
@@ -247,9 +247,8 @@
    * that crosses w = 0 (the point at infinity) can be left out instead of being drawn straight through the camera.
    * @returns {number[]} Flat xyz positions for LineSegments.
    */
-  function generateZLineSegments(size, offset, space) {
+  function generateZLineSegments(size, offset, space, divisions) {
     const positions = [];
-    const divisions = size *2;
     const gridValue = (k) => parseFloat((-size + offset + (2 * size * k) / divisions).toFixed(3));
 
     for (let k = 0; k < divisions; k++) {
@@ -314,17 +313,16 @@ function generateFrustum() {
     return frustum;
   }
 
-  function generateGrid(space, offset, size){
+  function generateGrid(space, offset, size, divisions){
     const g = new THREE.Group();
-    const divisions = 2 * size; // one line per unit
     const gridValue = (k) => parseFloat((-size + offset + (2 * size * k) / divisions).toFixed(3));
 
     // Retrieve Vector4 points using generateGridPoints
-    const vec4Points = generateGridPoints(size,offset,space);
+    const vec4Points = generateGridPoints(size,offset,space,divisions);
     
     // Horizontal (X-aligned) lines come from the endpoint pairs; vertical (Z-aligned) lines are sampled separately
     const xPositions = [];
-    const zPositions = generateZLineSegments(size,offset,space);
+    const zPositions = generateZLineSegments(size,offset,space,divisions);
 
     for (let i = 0; i < vec4Points.length; i += 4) {
       // Points 0 & 1 of each loop iteration are horizontal lines (along X)
@@ -360,8 +358,8 @@ function generateFrustum() {
     return g;
   }
 
-  function resetGrid(space,offset,size){
-    const newGrid = generateGrid(space, offset,size);
+  function resetGrid(space,offset,size,divisions){
+    const newGrid = generateGrid(space, offset,size,divisions);
     const oldGrid = scene.getObjectByName(space.toString());
     if (oldGrid) {
       newGrid.visible = oldGrid.visible;
@@ -370,21 +368,24 @@ function generateFrustum() {
     scene.add(newGrid);
   }
 
-  function rebuildLines(offset,size){
+  function rebuildLines(offset,size,divisions){
     // Add model space grid
-    resetGrid(1,offset,size);
+    resetGrid(1,offset,size,divisions);
 
     // Add world space grid
-    resetGrid(2, offset,size);
+    resetGrid(2, offset,size,divisions);
 
     // Add view space grid
-    resetGrid(3, offset,size);
+    resetGrid(3, offset,size,divisions);
+
+    // Add clip space grid
+    resetGrid(4, offset,size,divisions);
 
     // Add NDC grid
-    resetGrid(5, offset,size);
+    resetGrid(5, offset,size,divisions);
 
     // Add window space grid
-    resetGrid(6, offset,size);
+    resetGrid(6, offset,size,divisions);
 
     const oldFrustum = scene.getObjectByName("frustum");
     if (oldFrustum) remove(oldFrustum);
@@ -392,20 +393,21 @@ function generateFrustum() {
   }
   
   // Add events for grid definers
-  const gridDefiners = ["size","xoffset","yoffset","step"];
+  const gridDefiners = ["size","xoffset","yoffset","divisions"];
   gridDefiners.forEach((id) => {
     const input = document.getElementById(id);
     input.addEventListener('input', (e) => {
-      console.log("changed");
       const offset = parseFloat(document.getElementById('xoffset').value);
       const size = parseFloat(document.getElementById('size').value);
-      rebuildLines(offset,size);
+      const divisions = parseFloat(document.getElementById('divisions').value);
+      rebuildLines(offset,size,divisions);
     });
   });
 
   const offset = parseFloat(document.getElementById('xoffset').value);
   const size = parseFloat(document.getElementById('size').value);
-  rebuildLines(offset,size);
+  const divisions = parseFloat(document.getElementById('divisions').value);
+  rebuildLines(offset,size,divisions);
 
 
   // Listen directly to user input changes
@@ -423,6 +425,7 @@ function generateFrustum() {
     'show-object': '1',
     'show-world':  '2',
     'show-eye':    '3',
+    'show-clip':   '4',
     'show-ndc':    '5',
     'show-window': '6',
     'show-camera': 'cameraCone',

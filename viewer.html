@@ -79,9 +79,10 @@
   </div>
   <hr>
   <h3>Camera params</h3>
+  <div class="ui-row"><label><input type="checkbox" id="ortho" checked> Orthographic</label></div>
   <div class="ui-row"> Near / far: <input type="number" id="near" value="1"> <input type="number" id="far" value="5"> </div>
-  <div class="ui-row"> Fov: <input type="number" id="fov" value="60" min="1"> </div>
-  <div class="ui-row"> Aspect ratio: <input type="number" id="aspect-ratio" value="1" min="0"> </div>
+  <div class="ui-row"> Fov: <input type="number" id="fov" value="60" min="1"> Aspect ratio: <input type="number" id="aspect-ratio" value="1" min="0"> </div>
+  <div class="ui-row"> Left / Right (ortho): <input type="number" id="left" value="-2"> <input type="number" id="right" value="2"> </div>
   <hr>
   <h3>Coordinate Spaces</h3>
   <div class="ui-row"><label><input type="checkbox" id="show-object" checked> Object Space</label></div>
@@ -112,14 +113,17 @@
       offset.y = parseFloat(document.getElementById('yoffset').value);
       return offset;
   }
+  function getSize(){return parseFloat(document.getElementById('size').value);}
+  function getDiv(){ return parseFloat(document.getElementById('divisions').value);}
+  function getNear(){return parseFloat(document.getElementById('near').value);}
+  function getFar(){return parseFloat(document.getElementById('far').value);}
+  function getFov(){return parseFloat(document.getElementById('fov').value);}
+  function getAR() {return Math.max(0.00001, parseFloat(document.getElementById('aspect-ratio').value) || 0.00001);}
+  function getNpix(){return parseFloat(document.getElementById('winW').value);}
+  function isOrtho(){return document.getElementById('ortho').checked;}
+  function getLeft(){return parseFloat(document.getElementById('left').value);}
+  function getRight(){return parseFloat(document.getElementById('right').value);}
 
-  function getSize(){
-    return parseFloat(document.getElementById('size').value);
-  }
-
-  function getDiv(){
-    return parseFloat(document.getElementById('divisions').value);
-  }
 
   // Free GPU resurces that the material was using
   function disposeMaterial(mat) {
@@ -183,24 +187,35 @@
   scene.add(cube);
 
   // -------------------------------------- INIT CONE --------------------------------------
-  const lookAtPos = new THREE.Vector3(10,0,10);
-
   const cameraGeometry = new THREE.ConeGeometry(1,1,10);
   cameraGeometry.rotateX(-Math.PI / 2);
   const cameraMaterial = new THREE.MeshNormalMaterial();
   const cameraMesh = new THREE.Mesh(cameraGeometry, cameraMaterial);
   cameraMesh.name = "cameraCone";
   scene.add(cameraMesh);
-  cameraMesh.lookAt(lookAtPos.x ,0,lookAtPos.z);
-  cameraMesh.updateMatrixWorld(true);
 
-  // THIS CAMERA IS NOT THE ONE USED FOR RENDERING ONLY TO EXTRACT THE VIEW AND PROJECTION MATRICES
+  function updateCamera(lookAtPos){
+    const cm = scene.getObjectByName("cameraCone");
+    cm.lookAt(lookAtPos.x ,0,lookAtPos.z);
+    cm.updateMatrixWorld(true);
 
-  // const orthoCamera = new THREE.OrthographicCamera(-2, 2, 10, -10, 1, 5);  // (left, right, top, bottom, near, far)
-  var c = new THREE.PerspectiveCamera(60, 1, 1, 5); // (fov, aspect, near, far)
-  c.name = "matrixCamera";
-  scene.add(c);
-  c.lookAt(lookAtPos.x ,0,lookAtPos.z);
+    const oldCam = scene.getObjectByName("matrixCamera");
+    if(oldCam) {
+      oldCam.removeFromParent();
+      oldCam.dispose();
+    }
+    
+    // THIS CAMERA IS NOT THE ONE USED FOR RENDERING ONLY TO EXTRACT THE VIEW AND PROJECTION MATRICES
+    const newCam = isOrtho() ? new THREE.OrthographicCamera(getLeft(),getRight(),10,-10,getNear(),getFar()) : 
+     new THREE.PerspectiveCamera(getFov(), getAR(), getNear(), getFar()); // (fov, aspect, near, far)
+    newCam.name = "matrixCamera";
+    scene.add(newCam);
+    newCam.lookAt(lookAtPos.x ,0,lookAtPos.z);
+    newCam.updateMatrixWorld();
+    newCam.updateProjectionMatrix();
+  }
+
+  updateCamera(new THREE.Vector3(10,0,10));
 
   // -------------------------------------- DEFINE TRANSFORMS --------------------------------------
   const applyPerspDiv = (vec) => {
@@ -228,15 +243,13 @@
     
     // Window to NDC
     if (space > 5) {
-      var nPixels = document.getElementById('winW').value;
+      var nPixels = getNpix();
       res.x = (res.x / nPixels) * 2 - 1;
       res.z = res.z * 2 - 1;
     }
 
     const cam = scene.getObjectByName("matrixCamera");
     if(!cam) return res;
-    cam.updateProjectionMatrix();
-    cam.updateMatrixWorld();
     const viewInverse = cam.matrixWorld.clone();
     const projInverse = cam.projectionMatrix.clone().invert();
   
@@ -410,23 +423,12 @@ function generateFrustum() {
   }
 
   function rebuildLines(offset,size,divisions){
-    // Add model space grid
-    resetGrid(1,offset,size,divisions);
-
-    // Add world space grid
-    resetGrid(2, offset,size,divisions);
-
-    // Add view space grid
-    resetGrid(3, offset,size,divisions);
-
-    // Add clip space grid
-    resetGrid(4, offset,size,divisions);
-
-    // Add NDC grid
-    resetGrid(5, offset,size,divisions);
-
-    // Add window space grid
-    resetGrid(6, offset,size,divisions);
+    resetGrid(1,offset,size,divisions); //obj space
+    resetGrid(2, offset,size,divisions); //world space
+    resetGrid(3, offset,size,divisions); //view space
+    resetGrid(4, offset,size,divisions); //clip space
+    resetGrid(5, offset,size,divisions); //NDC
+    resetGrid(6, offset,size,divisions); //window space
 
     const oldFrustum = scene.getObjectByName("frustum");
     if (oldFrustum) remove(oldFrustum);
@@ -474,6 +476,25 @@ function generateFrustum() {
     });
     checkbox.dispatchEvent(new Event('change'));
   });
+  
+  const cameraUpdateList = ['near', 'far', 'aspect-ratio', 'fov', 'ortho','left','right'];
+  cameraUpdateList.forEach((id) => {
+    const element = document.getElementById(id);
+    element.addEventListener('input', () => { rebuildCamera(getOffset(), getSize(), getDiv());});
+  });
+
+  function rebuildCamera(offset,size,divisions){
+    updateCamera(new THREE.Vector3(10,0,10));
+
+    resetGrid(3, offset,size,divisions); //view space
+    resetGrid(4, offset,size,divisions); //clip space
+    resetGrid(5, offset,size,divisions); //NDC
+    resetGrid(6, offset,size,divisions); //window space
+
+    const oldFrustum = scene.getObjectByName("frustum");
+    if (oldFrustum) remove(oldFrustum);
+    scene.add(generateFrustum());
+  }
 
   // TODO: WIP
   // const raycaster = new THREE.Raycaster();

@@ -497,45 +497,51 @@ function generateFrustum() {
   }
 
   // TODO: WIP
-  // const raycaster = new THREE.Raycaster();
-  // const mouse = new THREE.Vector2();
-  // window.addEventListener('pointerdown', (event) => {
-  //   // 1. Convert mouse click coordinates to Normalized Device Coordinates (-1 to +1)
-  //   const rect = renderer.domElement.getBoundingClientRect();
-  //   mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-  //   mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  window.addEventListener('pointerdown', (event) => {
 
-  //   // 2. Set up the raycaster using the camera and mouse position
-  //   raycaster.setFromCamera(mouse, camera);
+    const tch = scene.getObjectByName("tcHelper");
+    if(tch && tch.controls.dragging) return;
 
-  //   // 3. Get the cube from the scene
-  //   const cubeObj = scene.getObjectByName("cube");
-  //   if (!cubeObj) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const cubeObj = scene.getObjectByName("cube");
+    const intersects = raycaster.intersectObject(cubeObj, true);
 
-  //   // 4. Check for intersections (true checks descendants as well)
-  //   const intersects = raycaster.intersectObject(cubeObj, true);
-
-  //   if (intersects.length > 0) {
-  //     var tc = scene.getObjectByName("cubeTc");
-  //     if(tc){
-  //       if(tc.mode == 'translate'){
-  //         tc.setMode('scale');
-  //         tc.showY = false;
-  //       } else if(tc.mode == 'scale'){
-  //         tc.setMode('rotate');
-  //         tc.showY = false;
-  //       } else if(tc.mode == 'rotate'){
-  //         tc.detach();
-  //         tc.parent.remove(tc);
-  //       }
-  //     }
-  //     tc = new THREE.TransformControls(camera, renderer.domElement);
-  //     tc.name = "cubeTc";
-  //     tc.attach(cubeObj);
-  //     tc.showY = false;
-  //     scene.add(tc);
-  //   }
-  // });
+    if (intersects.length > 0) {
+      if(tch){
+        const tc = tch.controls;
+        if(tc.mode == 'translate'){
+          tc.setMode('scale');
+          tc.showY = false;
+        } else if(tc.mode == 'scale'){
+          tc.setMode('rotate');
+          tc.showX = false;
+          tc.showY = true;
+          tc.showZ = false;
+        } else if(tc.mode == 'rotate'){
+          tc.detach();
+          tch.removeFromParent();
+        }
+      }
+      else{
+        const tc = new TransformControls(camera, renderer.domElement);
+        tc.mode = 'translate';
+        tc.showY = false;
+        tc.attach(cubeObj);
+        tc.addEventListener('change', () => {
+          updateCamera(cubeObj.position);
+          rebuildLines(getOffset(),getSize(),getDiv());}
+        );
+        const newTch = tc.getHelper();
+        newTch.name = "tcHelper";
+        scene.add(newTch);
+      }
+    }
+  });
 
 
   // ----------- OTHER STUFF ---------------

@@ -375,7 +375,6 @@ function generateFrustum() {
   }
 
   function resetGrid(space,offset,size,divisions){
-    const newGrid = generateGrid(space, offset,size,divisions);
     const newGrid = generateGrid(space, offset.x,size,divisions);
     const oldGrid = scene.getObjectByName(space.toString());
     if (oldGrid) {
@@ -425,7 +424,7 @@ function generateFrustum() {
   document.getElementById('winW').addEventListener('input', (e) => {
     const newWidth = parseFloat(e.target.value);
     if (!isNaN(newWidth) && newWidth > 0) {
-      resetGrid(6,getOffset().x,getSize(),getDiv());
+      resetGrid(6,getOffset(),getSize(),getDiv());
     }
   });
   

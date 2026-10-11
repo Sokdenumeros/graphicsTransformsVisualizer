@@ -79,7 +79,9 @@
   </div>
   <hr>
   <h3>Camera params</h3>
-  // TODO, make modifiable near, far proj/ortho, lookat.
+  <div class="ui-row"> Near / far: <input type="number" id="near" value="1"> <input type="number" id="far" value="5"> </div>
+  <div class="ui-row"> Fov: <input type="number" id="fov" value="60" min="1"> </div>
+  <div class="ui-row"> Aspect ratio: <input type="number" id="aspect-ratio" value="1" min="0"> </div>
   <hr>
   <h3>Coordinate Spaces</h3>
   <div class="ui-row"><label><input type="checkbox" id="show-object" checked> Object Space</label></div>
@@ -87,16 +89,15 @@
   <div class="ui-row"><label><input type="checkbox" id="show-eye"> Eye (View) Space</label></div>
   <div class="ui-row"><label><input type="checkbox" id="show-clip"> Clip Space</label></div>
   <div class="ui-row"><label><input type="checkbox" id="show-ndc"> NDC</label></div>
-  <div class="ui-row"><label><input type="checkbox" id="show-window"> Window Space</label></div>
-  <div class="ui-row">
-    Num Pixels: <input type="number" id="winW" value="10" min="1"> 
-  </div>
+  <div class="ui-row"><label><input type="checkbox" id="show-window"> Window Space</label> <label>nPixels: <input type="number" id="winW" value="10" min="1"></label> </div>
   
   <hr>
   <h3>Element Visibility</h3>
-  <div class="ui-row"><label><input type="checkbox" id="show-frustum" checked> View Frustum (World)</label></div>
-  <div class="ui-row"><label><input type="checkbox" id="show-camera" checked> Show camera</label></div>
-  <div class="ui-row"><label><input type="checkbox" id="show-cube" checked> Show object</label></div>
+  <div class="ui-row">
+    <label><input type="checkbox" id="show-frustum" checked> Frustum </label>
+    <label><input type="checkbox" id="show-camera" checked> Camera</label>
+    <label><input type="checkbox" id="show-cube" checked> Object</label>
+  </div>
 </div>
 
 <script type = "module">
@@ -260,16 +261,17 @@
   function generateGridPoints(size, offset, space, divisions) {
     // Default to identity function if no transformation is provided
     const points = [];
-    const gridValue = (k) => parseFloat((-size + offset + (2 * size * k) / divisions).toFixed(3));
+    const gridValue = (k,off) => parseFloat((-size + off + (2 * size * k) / divisions).toFixed(3));
     for (let k = 0; k < divisions; k++) {
-      const i = gridValue(k);
+      const ix = gridValue(k,offset.x);
+      const iz = gridValue(k,offset.y);
       // Horizontal line endpoints: (-size, 0, i, 1) to (size, 0, i, 1)
-      const hStart = new THREE.Vector4(-size+offset, 0, i, 1);
-      const hEnd = new THREE.Vector4(size+offset, 0, i, 1);
+      const hStart = new THREE.Vector4(-size+offset.x, 0, iz, 1);
+      const hEnd = new THREE.Vector4(size+offset.x, 0, iz, 1);
 
       // Vertical line endpoints: (i, 0, -size, 1) to (i, 0, size, 1)
-      const vStart = new THREE.Vector4(i, 0, -size+offset, 1);
-      const vEnd = new THREE.Vector4(i, 0, size+offset, 1);
+      const vStart = new THREE.Vector4(ix, 0, -size+offset.y, 1);
+      const vEnd = new THREE.Vector4(ix, 0, size+offset.y, 1);
 
       // Apply transform function and store results
       points.push(applyMat(hStart,space));
@@ -288,13 +290,12 @@
    */
   function generateZLineSegments(size, offset, space, divisions) {
     const positions = [];
-    const gridValue = (k) => parseFloat((-size + offset + (2 * size * k) / divisions).toFixed(3));
-
+    const gridValue = (k,off) => parseFloat((-size + off + (2 * size * k) / divisions).toFixed(3));
     for (let k = 0; k < divisions; k++) {
-      const x = gridValue(k);
+      const x = gridValue(k,offset.x);
       let prev = null;
       for (let j = 0; j <= divisions; j++) {
-        const z = j < divisions ? gridValue(j) : size + offset;
+        const z = j < divisions ? gridValue(j,offset.y) : size + offset.y;
         const cur = applyMat(new THREE.Vector4(x, 0, z, 1),space);
         // Consecutive samples on opposite sides of w = 0 are on opposite sides of infinity: don't join them
         if (prev && prev.wSign === cur.wSign) {
@@ -354,7 +355,7 @@ function generateFrustum() {
 
   function generateGrid(space, offset, size, divisions){
     const g = new THREE.Group();
-    const gridValue = (k) => parseFloat((-size + offset + (2 * size * k) / divisions).toFixed(3));
+    const gridValue = (k,off) => parseFloat((-size + off + (2 * size * k) / divisions).toFixed(3));
 
     // Retrieve Vector4 points using generateGridPoints
     const vec4Points = generateGridPoints(size,offset,space,divisions);
@@ -388,9 +389,10 @@ function generateFrustum() {
     // Labels show the original (x, z) of the endpoint, drawn where that endpoint ends up after the transform.
     // Red lines are labelled at their +x end, blue lines at their -z end
     for (let i = 0; i < vec4Points.length; i += 4) {
-      const value = gridValue(i / 4);
-      makeLabel(`(${size + offset}, ${value})`, '#ff6666', vec4Points[i + 1],g);
-      makeLabel(`(${value}, ${-size + offset})`, '#6699ff', vec4Points[i + 2],g);
+      const vx = gridValue(i/4,offset.x);
+      const vz = gridValue(i/4,offset.y)
+      makeLabel(`(${size + offset.x}, ${vz})`, '#ff6666', vec4Points[i + 1],g);
+      makeLabel(`(${vx}, ${-size + offset.x})`, '#6699ff', vec4Points[i + 2],g);
     }
     g.name = space.toString();
 
@@ -398,7 +400,7 @@ function generateFrustum() {
   }
 
   function resetGrid(space,offset,size,divisions){
-    const newGrid = generateGrid(space, offset.x,size,divisions);
+    const newGrid = generateGrid(space, offset,size,divisions);
     const oldGrid = scene.getObjectByName(space.toString());
     if (oldGrid) {
       newGrid.visible = oldGrid.visible;
@@ -441,7 +443,6 @@ function generateFrustum() {
   });
 
   rebuildLines(getOffset(),getSize(),getDiv());
-
 
   // Listen directly to user input changes
   document.getElementById('winW').addEventListener('input', (e) => {

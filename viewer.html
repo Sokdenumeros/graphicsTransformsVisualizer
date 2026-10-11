@@ -97,6 +97,22 @@
 </div>
 
 <script>
+  // UI input getters
+  function getOffset() {
+      const offset = new THREE.Vector2();
+      offset.x = parseFloat(document.getElementById('xoffset').value);
+      offset.y = parseFloat(document.getElementById('yoffset').value);
+      return offset;
+  }
+
+  function getSize(){
+    return parseFloat(document.getElementById('size').value);
+  }
+
+  function getDiv(){
+    return parseFloat(document.getElementById('divisions').value);
+  }
+
   // TODO update to a newer threejs, transform controls and orbitControls versions.
   function remove(obj) {
     //TODO properly obj.dispose();
@@ -360,6 +376,7 @@ function generateFrustum() {
 
   function resetGrid(space,offset,size,divisions){
     const newGrid = generateGrid(space, offset,size,divisions);
+    const newGrid = generateGrid(space, offset.x,size,divisions);
     const oldGrid = scene.getObjectByName(space.toString());
     if (oldGrid) {
       newGrid.visible = oldGrid.visible;
@@ -397,26 +414,18 @@ function generateFrustum() {
   gridDefiners.forEach((id) => {
     const input = document.getElementById(id);
     input.addEventListener('input', (e) => {
-      const offset = parseFloat(document.getElementById('xoffset').value);
-      const size = parseFloat(document.getElementById('size').value);
-      const divisions = parseFloat(document.getElementById('divisions').value);
-      rebuildLines(offset,size,divisions);
+      rebuildLines(getOffset(),getSize(),getDiv());
     });
   });
 
-  const offset = parseFloat(document.getElementById('xoffset').value);
-  const size = parseFloat(document.getElementById('size').value);
-  const divisions = parseFloat(document.getElementById('divisions').value);
-  rebuildLines(offset,size,divisions);
+  rebuildLines(getOffset(),getSize(),getDiv());
 
 
   // Listen directly to user input changes
   document.getElementById('winW').addEventListener('input', (e) => {
     const newWidth = parseFloat(e.target.value);
     if (!isNaN(newWidth) && newWidth > 0) {
-      const offset = parseFloat(document.getElementById('xoffset').value);
-      const size = parseFloat(document.getElementById('size').value);
-      resetGrid(6,offset,size);
+      resetGrid(6,getOffset().x,getSize(),getDiv());
     }
   });
   

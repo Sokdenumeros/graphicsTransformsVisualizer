@@ -53,26 +53,29 @@
     hr { border-color: #444; }
   </style>
   
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Modern ES Module Import Map for r186 -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.186.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.186.1/examples/jsm/"
+      }
+    }
+  </script>
+  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script> -->
 </head>
 <body>
 
 <div id="ui-panel">
   <h3>Grid params</h3>
-  //TODO update how grids are built
   <div class="ui-row">
-    Grid Size: <input type="number" id="size" value="10" min="1"> 
+    Size / subdivisions <input type="number" id="size" value="10" min="1"> <input type="number" id="divisions" value="20" min="1">
   </div>
   <div class="ui-row">
-    Grid X offset: <input type="number" id="xoffset" value="0"> 
-  </div>
-  <div class="ui-row">
-    Grid Y offset: <input type="number" id="yoffset" value="0"> 
-  </div>
-  <div class="ui-row">
-    Divisions: <input type="number" id="divisions" value="1" min="1"> 
+    XY offset: <input type="number" id="xoffset" value="0"> <input type="number" id="yoffset" value="0"> 
   </div>
   <hr>
   <h3>Camera params</h3>
@@ -96,7 +99,11 @@
   <div class="ui-row"><label><input type="checkbox" id="show-cube" checked> Show object</label></div>
 </div>
 
-<script>
+<script type = "module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  import { TransformControls } from 'three/addons/controls/TransformControls.js';
+
   // UI input getters
   function getOffset() {
       const offset = new THREE.Vector2();
@@ -113,10 +120,26 @@
     return parseFloat(document.getElementById('divisions').value);
   }
 
-  // TODO update to a newer threejs, transform controls and orbitControls versions.
+  // Free GPU resurces that the material was using
+  function disposeMaterial(mat) {
+    // Loop through material properties to find and dispose internal textures
+    for (const key of Object.keys(mat)) {
+      const value = mat[key];
+      if (value && typeof value === 'object' && 'isTexture' in value) {
+        value.dispose();
+      }
+    }
+    mat.dispose();
+  }
+
+  // Free all GPU resources that the object was using
   function remove(obj) {
-    //TODO properly obj.dispose();
-    obj.parent.remove(obj);
+    obj.traverse((child) => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) disposeMaterial(child.material);
+    });
+
+    obj.removeFromParent();
   } 
 
   // -------------------------------------- INIT CAMERA - SCENE - RENDERER --------------------------------------
@@ -142,7 +165,7 @@
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableRotate = false; // Keep fixed top-down orientation
   controls.enableZoom = true;    // Allow zooming in/out
   controls.enablePan = true;     // Allow panning around the scene

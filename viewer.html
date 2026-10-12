@@ -17,44 +17,156 @@
       height: 100vh;
       display: block;
     }
+    
+    /* Main Control Panel (Top-Left) */
     #ui-panel {
       position: absolute;
       top: 10px;
       left: 10px;
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(15, 15, 15, 0.92);
       padding: 15px;
       border-radius: 8px;
       border: 1px solid #444;
       pointer-events: auto;
+      backdrop-filter: blur(5px);
+      width: 320px;
+      max-height: 90vh;
+      overflow-y: auto;
       z-index: 100;
     }
+
+    /* Centered Modal Info Panel */
+    #info-panel {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 360px;
+      background: rgba(20, 20, 20, 0.95);
+      padding: 20px;
+      border-radius: 10px;
+      border: 1px solid #555;
+      pointer-events: auto;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+      z-index: 1000;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #ccc;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: #888;
+      cursor: pointer;
+      font-size: 18px;
+      padding: 0 4px;
+      line-height: 1;
+    }
+    .close-btn:hover { color: #fff; }
+
+    #open-info-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(15, 15, 15, 0.9);
+      color: #7aa2f7;
+      border: 1px solid #444;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      z-index: 99;
+      display: none;
+      font-size: 13px;
+    }
+    #open-info-btn:hover { background: #222; }
+
     .ui-row {
       margin-bottom: 10px;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 10px;
     }
-    label { cursor: pointer; }
-    input[type="number"] {
-      width: 60px;
-      background: #333;
-      color: #fff;
-      border: 1px solid #555;
-      border-radius: 4px;
-      padding: 2px 5px;
-    }
-    select {
-      background: #333;
-      color: #fff;
-      border: 1px solid #555;
-      border-radius: 4px;
-      padding: 2px 5px;
-    }
-    hr { border-color: #444; }
-  </style>
-  
 
-  <!-- Modern ES Module Import Map for r186 -->
+    .ui-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    label { 
+      cursor: pointer; 
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    input[type="number"] {
+      width: 55px;
+      background: #222;
+      color: #fff;
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 3px 6px;
+      text-align: left; /* Text aligned to the left inside the box */
+    }
+
+    select {
+      background: #222;
+      color: #fff;
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 3px 5px;
+    }
+
+    hr { border-color: #333; margin: 12px 0; }
+
+    /* Clickable Popover Tooltip System */
+    .info-trigger {
+      cursor: pointer;
+      color: #7aa2f7;
+      font-size: 11px;
+      border: 1px solid #7aa2f7;
+      border-radius: 50%;
+      width: 15px;
+      height: 15px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+    .info-trigger:hover { background: rgba(122, 162, 247, 0.2); }
+
+    .popover-card {
+      display: none;
+      position: fixed;
+      width: 240px;
+      background: #222;
+      color: #fff;
+      border-radius: 6px;
+      padding: 10px;
+      z-index: 2000;
+      border: 1px solid #555;
+      font-size: 12px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.6);
+      line-height: 1.4;
+    }
+
+    .disabled-section {
+      opacity: 0.35;
+      pointer-events: none;
+    }
+  </style>
+
   <script type="importmap">
     {
       "imports": {
@@ -63,43 +175,212 @@
       }
     }
   </script>
-  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script> -->
 </head>
 <body>
 
+<!-- Reopen button for info panel when closed -->
+<button id="open-info-btn">ℹ Info & Legend</button>
+
+<!-- Global Popover Card Template -->
+<div id="global-popover" class="popover-card">
+  <div class="panel-header" style="margin-bottom:6px;">
+    <strong id="popover-title" style="color:#7aa2f7;">Info</strong>
+    <button class="close-btn" id="popover-close">&times;</button>
+  </div>
+  <div id="popover-content"></div>
+</div>
+
+<!-- Controls Panel -->
 <div id="ui-panel">
-  <h3>Grid params</h3>
-  <div class="ui-row">
-    Size / subdivisions <input type="number" id="size" value="10" min="1"> <input type="number" id="divisions" value="20" min="1">
-  </div>
-  <div class="ui-row">
-    XY offset: <input type="number" id="xoffset" value="0"> <input type="number" id="yoffset" value="0"> 
-  </div>
-  <hr>
-  <h3>Camera params</h3>
-  <div class="ui-row"><label><input type="checkbox" id="ortho" checked> Orthographic</label></div>
-  <div class="ui-row"> Near / far: <input type="number" id="near" value="1"> <input type="number" id="far" value="5"> </div>
-  <div class="ui-row"> Fov: <input type="number" id="fov" value="60" min="1"> Aspect ratio: <input type="number" id="aspect-ratio" value="1" min="0"> </div>
-  <div class="ui-row"> Left / Right (ortho): <input type="number" id="left" value="-2"> <input type="number" id="right" value="2"> </div>
-  <hr>
-  <h3>Coordinate Spaces</h3>
-  <div class="ui-row"><label><input type="checkbox" id="show-object" checked> Object Space</label></div>
-  <div class="ui-row"><label><input type="checkbox" id="show-world" checked> World Space</label></div>
-  <div class="ui-row"><label><input type="checkbox" id="show-eye"> Eye (View) Space</label></div>
-  <div class="ui-row"><label><input type="checkbox" id="show-clip"> Clip Space</label></div>
-  <div class="ui-row"><label><input type="checkbox" id="show-ndc"> NDC</label></div>
-  <div class="ui-row"><label><input type="checkbox" id="show-window"> Window Space</label> <label>nPixels: <input type="number" id="winW" value="10" min="1"></label> </div>
+  <h3>
+    Grid Params 
+    <span class="info-trigger" data-title="Grid Parameters" data-desc="<p>Size defines how long the grid spans in every direction. A size of 10 means the grid spans 10 units toward the negative side and 10 towards the positive side, making it 20 units long.<p>The divisions are how many lines will the grid have, so if you have 20 divisions in a size 10 grid, you will have one grid line each integer unit.<p>Finally, the offset indicates the offset of the center of the grid, so if you have a size 10 grid with offset 10, instead of -10 to 10 it will go from 0 to 20.">?</span>
+  </h3>
   
-  <hr>
-  <h3>Element Visibility</h3>
   <div class="ui-row">
-    <label><input type="checkbox" id="show-frustum" checked> Frustum </label>
+    <span>Size / Divs:</span>
+    <div class="ui-group">
+      <input type="number" id="size" value="10" min="1"> 
+      <input type="number" id="divisions" value="20" min="1">
+    </div>
+  </div>
+  
+  <div class="ui-row">
+    <span>XY Offset:</span>
+    <div class="ui-group">
+      <input type="number" id="xoffset" value="0"> 
+      <input type="number" id="yoffset" value="0"> 
+    </div>
+  </div>
+
+  <hr>
+
+  <h3>
+    Camera Parameters
+    <span class="info-trigger" data-title="Camera Parameters" data-desc="<p>You can toggle between an orthographic and a perspective camera.<p>For both cameras, you can select the near and far planes<p>For the perspective camera, you can also select the field of view and the aspect ratio (better kept at 1).<p>For the orthographic camera, you can select the left and right planes">?</span>
+  </h3>
+  <div class="ui-row">
+    <label><input type="checkbox" id="ortho" checked> Orthographic</label>
+  </div>
+  
+  <div class="ui-row">
+    <span>Near / Far:</span>
+    <div class="ui-group">
+      <input type="number" id="near" value="1"> 
+      <input type="number" id="far" value="5"> 
+    </div>
+  </div>
+
+  <div id="perspective-controls" class="disabled-section">
+    <div class="ui-row">
+      <span>FOV / Aspect:</span>
+      <div class="ui-group">
+        <input type="number" id="fov" value="60" min="1"> 
+        <input type="number" id="aspect-ratio" value="1"> 
+      </div>
+    </div>
+  </div>
+
+  <div id="ortho-controls">
+    <div class="ui-row">
+      <span>Left / Right:</span>
+      <div class="ui-group">
+        <input type="number" id="left" value="-2"> 
+        <input type="number" id="right" value="2"> 
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <h3>Coordinate Spaces </h3>
+  
+<div class="ui-row">
+    <label><input type="checkbox" id="show-object" checked> Object Space</label>
+    <span class="info-trigger" data-title="Object/Model Space" data-desc="<p>Object's local frame of reference.</p><p>Try clicking the object to translate, rotate and scale it so you can see how it changes.</p><p>The vertices of the model go from -1 to 1, notice how in object space this always holds true.</p>">?</span>
+  </div> 
+  <div class="ui-row">
+    <label><input type="checkbox" id="show-world" checked> World Space</label>
+    <span class="info-trigger" data-title="World Space" data-desc="<p>Global scene coordinate frame.</p><p>Think of it as the grid of the world.</p>">?</span>
+  </div>
+  <div class="ui-row">
+    <label><input type="checkbox" id="show-eye"> Eye (View) Space</label>
+    <span class="info-trigger" data-title="Eye/View/Camera Space" data-desc="<p>The world seen from the camera's point of view.</p><p>The coordinates are relative to the camera position and orientation.</p>">?</span>
+  </div>
+  <div class="ui-row">
+    <label><input type="checkbox" id="show-clip"> Clip Space</label>
+    <span class="info-trigger" data-title="Clip Space" data-desc="<p>After multiplying by projection matrix but before perspective division (Dividing each coordinate by w).</p><p>Without the perspective division, there isn't an intuitive description for this space.</p>">?</span>
+  </div>
+  <div class="ui-row">
+    <label><input type="checkbox" id="show-ndc"> NDC</label>
+    <span class="info-trigger" data-title="Normalized Device Coordinates" data-desc="<p>Space projected towards the screen and normalized between [-1,1].</p><p>Try to modify the camera params to see how it changes.</p><p>Notice how the frustum always lines up with the -1 and 1 axes.</p>">?</span>
+  </div>
+  <div class="ui-row">
+    <label><input type="checkbox" id="show-window"> Window Space</label>
+    <div class="ui-group">
+      <span style="font-size:11px; color:#aaa;">nPixels:</span>
+      <input type="number" id="winW" value="10" min="1">
+    </div>
+    <span class="info-trigger" data-title="Window Space" data-desc="<p>Final screen coordinates mapped directly to pixels.</p><p>Notice how x = 0 is on the left-most side of the frustum and the more pixels your screen has, the more concentrated the grid lines become.</p>">?</span> 
+  </div>
+  <hr>
+
+  <h3>Element Visibility</h3>
+  <div class="ui-row" style="justify-content: flex-start; gap: 15px;">
+    <label><input type="checkbox" id="show-frustum" checked> Frustum</label>
     <label><input type="checkbox" id="show-camera" checked> Camera</label>
     <label><input type="checkbox" id="show-cube" checked> Object</label>
   </div>
 </div>
+
+<!-- Centered Modal Explanatory Side Panel -->
+<div id="info-panel">
+  <div class="panel-header">
+    <h3 style="margin:0; color:#7aa2f7;">Pipeline Visualizer</h3>
+    <button class="close-btn" id="close-info-panel" title="Close Panel">&times;</button>
+  </div>
+  <p style="border-top: 1px solid #333; padding-top: 6px; margin-bottom: 0;">
+    Transformations and coordinate space changes can be interpreted as deforming the spatial grid of the world. 
+  </p>
+  <p>
+    If you are not familiar with this way of interpreting matrix products and other transformations, you can check 
+    <a href="https://www.youtube.com/watch?v=kYB8IZa5AuE&list=PLZHQObOWTQDPD3MizzM2xVFitgF8hE_ab&index=3" target="_blank" rel="noopener noreferrer">
+      3Blue1Brown's Linear Transformations Chapter
+    </a>.
+  </p>
+  <p style="border-top: 1px solid #333; padding-top: 6px; margin-bottom: 0;">
+    In this visualization, you are seing a top-down view of a 3D scene. Each grid represents the 
+    <span style="color: #ff5555; font-weight: bold;">X (red)</span> and 
+    <span style="color: #5555ff; font-weight: bold;">Z (blue)</span> axes of its respective coordinate space.
+  </p>
+  <p style="border-top: 1px solid #333; padding-top: 6px; margin-bottom: 0;">
+    Apart from the numbered labels at the end of each line, you can visually identify the positive sides of the grid because they are missing the last line.
+  </p>
+</div>
+
+<script type="module">
+  // 1. Dynamic UI toggling for Ortho vs Perspective inputs
+  const orthoCheckbox = document.getElementById('ortho');
+  const orthoControls = document.getElementById('ortho-controls');
+  const perspectiveControls = document.getElementById('perspective-controls');
+
+  function updateCameraUI() {
+    if (orthoCheckbox.checked) {
+      orthoControls.classList.remove('disabled-section');
+      perspectiveControls.classList.add('disabled-section');
+    } else {
+      orthoControls.classList.add('disabled-section');
+      perspectiveControls.classList.remove('disabled-section');
+    }
+  }
+  orthoCheckbox.addEventListener('change', updateCameraUI);
+  updateCameraUI();
+
+  // 2. Centered Modal Info Panel Logic
+  const infoPanel = document.getElementById('info-panel');
+  const closeInfoBtn = document.getElementById('close-info-panel');
+  const openInfoBtn = document.getElementById('open-info-btn');
+
+  closeInfoBtn.addEventListener('click', () => {
+    infoPanel.style.display = 'none';
+    openInfoBtn.style.display = 'block';
+  });
+
+  openInfoBtn.addEventListener('click', () => {
+    infoPanel.style.display = 'block';
+    openInfoBtn.style.display = 'none';
+  });
+
+  // 3. Click-to-Open Popover Tooltip System
+  const popover = document.getElementById('global-popover');
+  const popoverTitle = document.getElementById('popover-title');
+  const popoverContent = document.getElementById('popover-content');
+  const popoverClose = document.getElementById('popover-close');
+
+  document.querySelectorAll('.info-trigger').forEach(trigger => {
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      const rect = trigger.getBoundingClientRect();
+      popoverTitle.textContent = trigger.dataset.title;
+      popoverContent.innerHTML = trigger.dataset.desc;
+      
+      popover.style.left = `${rect.right + 10}px`;
+      popover.style.top = `${rect.top}px`;
+      popover.style.display = 'block';
+    });
+  });
+
+  popoverClose.addEventListener('click', () => {
+    popover.style.display = 'none';
+  });
+
+  window.addEventListener('click', (e) => {
+    if (!popover.contains(e.target) && !e.target.classList.contains('info-trigger')) {
+      popover.style.display = 'none';
+    }
+  });
+</script>
 
 <script type = "module">
   import * as THREE from 'three';
@@ -215,7 +496,7 @@
     newCam.updateProjectionMatrix();
   }
 
-  updateCamera(new THREE.Vector3(10,0,10));
+  updateCamera(cube.position);
 
   // -------------------------------------- DEFINE TRANSFORMS --------------------------------------
   const applyPerspDiv = (vec) => {
@@ -236,9 +517,8 @@
 
     // Model to world
     if (space == 1) {
-      const cub = scene.getObjectByName("cube");
-      cub.updateMatrixWorld(true);
-      return res.applyMatrix4(cub.matrixWorld);
+      cube.updateMatrixWorld(true);
+      return res.applyMatrix4(cube.matrixWorld);
     }
     
     // Window to NDC
@@ -484,7 +764,7 @@ function generateFrustum() {
   });
 
   function rebuildCamera(offset,size,divisions){
-    updateCamera(new THREE.Vector3(10,0,10));
+    updateCamera(cube.position);
 
     resetGrid(3, offset,size,divisions); //view space
     resetGrid(4, offset,size,divisions); //clip space
@@ -508,8 +788,7 @@ function generateFrustum() {
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
-    const cubeObj = scene.getObjectByName("cube");
-    const intersects = raycaster.intersectObject(cubeObj, true);
+    const intersects = raycaster.intersectObject(cube, true);
 
     if (intersects.length > 0) {
       if(tch){
@@ -531,11 +810,12 @@ function generateFrustum() {
         const tc = new TransformControls(camera, renderer.domElement);
         tc.mode = 'translate';
         tc.showY = false;
-        tc.attach(cubeObj);
+        tc.attach(cube);
         tc.addEventListener('change', () => {
-          updateCamera(cubeObj.position);
+          updateCamera(cube.position);
           rebuildLines(getOffset(),getSize(),getDiv());}
         );
+        tc.space = 'local';
         const newTch = tc.getHelper();
         newTch.name = "tcHelper";
         scene.add(newTch);

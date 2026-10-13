@@ -220,7 +220,7 @@
     <span class="info-trigger" data-title="Camera Parameters" data-desc="<p>You can toggle between an orthographic and a perspective camera.<p>For both cameras, you can select the near and far planes<p>For the perspective camera, you can also select the field of view and the aspect ratio (better kept at 1).<p>For the orthographic camera, you can select the left and right planes">?</span>
   </h3>
   <div class="ui-row">
-    <label><input type="checkbox" id="ortho" checked> Orthographic</label>
+    <label><input type="checkbox" id="ortho"> Orthographic</label>
   </div>
   
   <div class="ui-row">
@@ -256,7 +256,7 @@
   <h3>Coordinate Spaces </h3>
   
 <div class="ui-row">
-    <label><input type="checkbox" id="show-object" checked> Object Space</label>
+    <label><input type="checkbox" id="show-object"> Object Space</label>
     <span class="info-trigger" data-title="Object/Model Space" data-desc="<p>Object's local frame of reference.</p><p>Try clicking the object to translate, rotate and scale it so you can see how it changes.</p><p>The vertices of the model go from -1 to 1, notice how in object space this always holds true.</p>">?</span>
   </div> 
   <div class="ui-row">
@@ -481,10 +481,7 @@
     cm.updateMatrixWorld(true);
 
     const oldCam = scene.getObjectByName("matrixCamera");
-    if(oldCam) {
-      oldCam.removeFromParent();
-      oldCam.dispose();
-    }
+    if(oldCam) oldCam.removeFromParent();
     
     // THIS CAMERA IS NOT THE ONE USED FOR RENDERING ONLY TO EXTRACT THE VIEW AND PROJECTION MATRICES
     const newCam = isOrtho() ? new THREE.OrthographicCamera(getLeft(),getRight(),10,-10,getNear(),getFar()) : 
@@ -685,7 +682,7 @@ function generateFrustum() {
       const vx = gridValue(i/4,offset.x);
       const vz = gridValue(i/4,offset.y)
       makeLabel(`(${size + offset.x}, ${vz})`, '#ff6666', vec4Points[i + 1],g);
-      makeLabel(`(${vx}, ${-size + offset.x})`, '#6699ff', vec4Points[i + 2],g);
+      makeLabel(`(${vx}, ${-size + offset.y})`, '#6699ff', vec4Points[i + 2],g);
     }
     g.name = space.toString();
 

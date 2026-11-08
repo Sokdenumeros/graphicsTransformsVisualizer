@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Three.js Sequential Matrix Transformation Pipeline</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #111;
+      color: #fff;
+    }
+    canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+    
+    /* Transformation Pipeline UI Side Panel */
+    #pipeline-panel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(15, 15, 15, 0.92);
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      pointer-events: auto;
+      backdrop-filter: blur(6px);
+      width: 360px;
+      max-height: 92vh;
+      overflow-y: auto;
+      z-index: 100;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    }
+
+    h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 15px;
+      color: #7aa2f7;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .subtitle {
+      font-size: 11px;
+      color: #aaa;
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+
+    .stage-card {
+      background: rgba(30, 30, 30, 0.7);
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      transition: border-color 0.2s ease;
+    }
+
+    .stage-card:hover {
+      border-color: #555;
+    }
+
+    .stage-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .stage-title {
+      font-size: 12px;
+      font-weight: bold;
+      color: #e0af68;
+    }
+
+    .stage-inputs {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    select {
+      background: #222;
+      color: #7aa2f7;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 3px 5px;
+      font-size: 11px;
+      outline: none;
+    }
+
+    .input-group {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .input-group span {
+      font-size: 10px;
+      color: #888;
+      font-weight: bold;
+    }
+
+    input[type="number"] {
+      width: 50px;
+      background: #181818;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 3px 4px;
+      font-family: monospace;
+      font-size: 11px;
+      text-align: right;
+    }
+
+    input[type="number"]:focus, select:focus {
+      border-color: #7aa2f7;
+    }
+
+    .reset-btn {
+      background: #222;
+      color: #f7768e;
+      border: 1px solid #444;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      width: 100%;
+      margin-top: 8px;
+      transition: background 0.2s;
+    }
+
+    .reset-btn:hover {
+      background: #333;
+    }
+  </style>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.186.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.186.1/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+
+<div id="pipeline-panel">
+  <h3>Transformation Pipeline</h3>
+  <div class="subtitle">
+    Transformations are applied in sequence (Index 0 &rarr; 9). Default translations of (0,0,0) have no effect.
+  </div>
+
+  <div id="stages-container"></div>
+
+  <button class="reset-btn" id="reset-pipeline">Reset All Transformations</button>
+</div>
+
+<script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+  // ---------------------------------------------------------------------
+  // 1. SCENE, CAMERA, & RENDERER SETUP
+  // ---------------------------------------------------------------------
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x111116);
+
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(5, 4, 7);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  document.body.appendChild(renderer.domElement);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.target.set(0, 1, 0);
+
+  // Lighting
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+  scene.add(ambientLight);
+
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+  dirLight.position.set(5, 10, 7);
+  scene.add(dirLight);
+
+  // ---------------------------------------------------------------------
+  // 2. GRID AT y = 0 WITH 2 CELLS IN X & Z (-2 to +2 span, 2 divisions)
+  // ---------------------------------------------------------------------
+  const axesHelper = new THREE.AxesHelper(1);
+  scene.add(axesHelper);
+
+  // ---------------------------------------------------------------------
+  // 3. STICKMAN CHARACTER (BUILT WITH CUBES + EYES)
+  // ---------------------------------------------------------------------
+  const stickmanGroup = new THREE.Group();
+  stickmanGroup.name = "StickmanGroup";
+
+  // Shared Box Geometry & Material Palette
+  const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+  const matHead = new THREE.MeshStandardMaterial({ color: 0xf7768e, roughness: 0.3 });
+  const matTorso = new THREE.MeshStandardMaterial({ color: 0x7aa2f7, roughness: 0.3 });
+  const matLimbs = new THREE.MeshStandardMaterial({ color: 0xe0af68, roughness: 0.4 });
+  const matEye = new THREE.MeshBasicMaterial({ color: 0x000000 }); // Black eyes
+
+  // Head
+  const head = new THREE.Mesh(boxGeo, matHead);
+  head.scale.set(0.4, 0.4, 0.4);
+  head.position.set(0, 1.6, 0);
+  stickmanGroup.add(head);
+
+  // Eyes (placed on the positive Z face to mark the "front")
+  const eyeGeo = new THREE.BoxGeometry(0.06, 0.06, 0.06);
+  const leftEye = new THREE.Mesh(eyeGeo, matEye);
+  leftEye.position.set(-0.08, 1.65, 0.21);
+  stickmanGroup.add(leftEye);
+
+  const rightEye = new THREE.Mesh(eyeGeo, matEye);
+  rightEye.position.set(0.08, 1.65, 0.21);
+  stickmanGroup.add(rightEye);
+
+  // Torso
+  const torso = new THREE.Mesh(boxGeo, matTorso);
+  torso.scale.set(0.5, 0.7, 0.3);
+  torso.position.set(0, 1.05, 0);
+  stickmanGroup.add(torso);
+
+  // Left Arm
+  const leftArm = new THREE.Mesh(boxGeo, matLimbs);
+  leftArm.scale.set(0.15, 0.6, 0.15);
+  leftArm.position.set(-0.38, 1.05, 0);
+  stickmanGroup.add(leftArm);
+
+  // Right Arm
+  const rightArm = new THREE.Mesh(boxGeo, matLimbs);
+  rightArm.scale.set(0.15, 0.6, 0.15);
+  rightArm.position.set(0.38, 1.05, 0);
+  stickmanGroup.add(rightArm);
+
+  // Left Leg
+  const leftLeg = new THREE.Mesh(boxGeo, matLimbs);
+  leftLeg.scale.set(0.18, 0.7, 0.18);
+  leftLeg.position.set(-0.15, 0.35, 0);
+  stickmanGroup.add(leftLeg);
+
+  // Right Leg
+  const rightLeg = new THREE.Mesh(boxGeo, matLimbs);
+  rightLeg.scale.set(0.18, 0.7, 0.18);
+  rightLeg.position.set(0.15, 0.35, 0);
+  stickmanGroup.add(rightLeg);
+
+  // Default Group Position, Rotation, Scale
+  stickmanGroup.position.set(0, 0, 0);
+  stickmanGroup.rotation.set(0, 0, 0);
+  stickmanGroup.scale.set(1, 1, 1);
+  scene.add(stickmanGroup);
+
+  // ---------------------------------------------------------------------
+  // 4. UI PIPELINE GENERATION (10 TRANSFORMATION STAGES)
+  // ---------------------------------------------------------------------
+  const NUM_STAGES = 10;
+  const stagesContainer = document.getElementById('stages-container');
+
+  for (let i = 0; i < NUM_STAGES; i++) {
+    const card = document.createElement('div');
+    card.className = 'stage-card';
+    card.innerHTML = `
+      <div class="stage-header">
+        <span class="stage-title">#${i} Stage</span>
+        <select id="type-${i}">
+          <option value="translate" selected>Translate</option>
+          <option value="rotate">Rotate (&deg;)</option>
+          <option value="scale">Scale</option>
+        </select>
+      </div>
+      <div class="stage-inputs">
+        <div class="input-group"><span>X:</span><input type="number" id="x-${i}" value="0" step="1"></div>
+        <div class="input-group"><span>Y:</span><input type="number" id="y-${i}" value="0" step="1"></div>
+        <div class="input-group"><span>Z:</span><input type="number" id="z-${i}" value="0" step="1"></div>
+      </div>
+    `;
+    stagesContainer.appendChild(card);
+  }
+
+  // Handle Dynamic Default Values when switching dropdown types
+  for (let i = 0; i < NUM_STAGES; i++) {
+    const typeSelect = document.getElementById(`type-${i}`);
+    const xInput = document.getElementById(`x-${i}`);
+    const yInput = document.getElementById(`y-${i}`);
+    const zInput = document.getElementById(`z-${i}`);
+
+    typeSelect.addEventListener('change', () => {
+      if (typeSelect.value === 'scale') {
+        xInput.value = '1';
+        yInput.value = '1';
+        zInput.value = '1';
+      } else {
+        xInput.value = '0';
+        yInput.value = '0';
+        zInput.value = '0';
+      }
+      updatePipeline();
+    });
+
+    [xInput, yInput, zInput].forEach(input => {
+      input.addEventListener('input', updatePipeline);
+    });
+  }
+
+  // Reset Button Logic
+  document.getElementById('reset-pipeline').addEventListener('click', () => {
+    for (let i = 0; i < NUM_STAGES; i++) {
+      const typeSelect = document.getElementById(`type-${i}`);
+      typeSelect.value = 'translate';
+      document.getElementById(`x-${i}`).value = '0';
+      document.getElementById(`y-${i}`).value = '0';
+      document.getElementById(`z-${i}`).value = '0';
+    }
+    updatePipeline();
+  });
+
+// ---------------------------------------------------------------------
+  // 5. MATRIX PIPELINE EVALUATION
+  // ---------------------------------------------------------------------
+  const tempMatrix = new THREE.Matrix4();
+  const stepMatrix = new THREE.Matrix4();
+  const euler = new THREE.Euler();
+  const scaleVec = new THREE.Vector3();
+  const transVec = new THREE.Vector3();
+
+  function updatePipeline() {
+    // Start with identity matrix
+    tempMatrix.identity();
+
+    // Loop from stage 0 to NUM_STAGES - 1
+    for (let i = 0; i < NUM_STAGES; i++) {
+      const type = document.getElementById(`type-${i}`).value;
+      const x = parseFloat(document.getElementById(`x-${i}`).value) || 0;
+      const y = parseFloat(document.getElementById(`y-${i}`).value) || 0;
+      const z = parseFloat(document.getElementById(`z-${i}`).value) || 0;
+
+      stepMatrix.identity();
+
+      if (type === 'translate') {
+        transVec.set(x, y, z);
+        stepMatrix.makeTranslation(transVec.x, transVec.y, transVec.z);
+      } else if (type === 'rotate') {
+        const rx = THREE.MathUtils.degToRad(x);
+        const ry = THREE.MathUtils.degToRad(y);
+        const rz = THREE.MathUtils.degToRad(z);
+        euler.set(rx, ry, rz, 'XYZ');
+        stepMatrix.makeRotationFromEuler(euler);
+      } else if (type === 'scale') {
+        scaleVec.set(x, y, z);
+        stepMatrix.makeScale(scaleVec.x, scaleVec.y, scaleVec.z);
+      }
+
+      // Premultiply so transformations apply correctly in world-space order from top to bottom
+      tempMatrix.premultiply(stepMatrix);
+    }
+
+    // Apply accumulated matrix stack to Stickman Group
+    stickmanGroup.matrixAutoUpdate = false;
+    stickmanGroup.matrix.copy(tempMatrix);
+    stickmanGroup.matrixWorldNeedsUpdate = true;
+  }
+
+  // ---------------------------------------------------------------------
+  // 6. ANIMATION LOOP & RESIZE HANDLER
+  // ---------------------------------------------------------------------
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  animate();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+</script>
+</body>
+</html>

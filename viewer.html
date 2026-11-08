@@ -291,6 +291,17 @@
     <label><input type="checkbox" id="show-camera" checked> Camera</label>
     <label><input type="checkbox" id="show-cube" checked> Object</label>
   </div>
+
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+    <h3 style="margin: 0;">Test Vertex</h3>
+    <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;"><input type="checkbox" id="show-point" checked> Visible</label>
+  </div>
+  <div class="ui-row"><span>Object:</span> <input type="text" id="coord-model" readonly value="(0, 0, 0)"></div>
+  <div class="ui-row"><span>World:</span> <input type="text" id="coord-world" readonly value="(0, 0, 0)"></div>
+  <div class="ui-row"><span>View:</span> <input type="text" id="coord-view" readonly value="(0, 0, 0)"></div>
+  <div class="ui-row"><span>Clip:</span> <input type="text" id="coord-clip" readonly value="(0, 0, 0, 0)"></div>
+  <div class="ui-row"><span>NDC:</span> <input type="text" id="coord-ndc" readonly value="(0, 0, 0)"></div>
+  <div class="ui-row"><span>Window:</span> <input type="text" id="coord-window" readonly value="(0, 0, 0)"></div>
 </div>
 
 <!-- Centered Modal Explanatory Side Panel -->
@@ -404,6 +415,7 @@
   function isOrtho(){return document.getElementById('ortho').checked;}
   function getLeft(){return parseFloat(document.getElementById('left').value);}
   function getRight(){return parseFloat(document.getElementById('right').value);}
+  function getSphVis(){return document.getElementById("show-point").checked;}
 
 
   // Free GPU resurces that the material was using
@@ -495,6 +507,51 @@
 
   updateCamera(cube.position);
 
+  // INIT sphere point
+  const sphereGeo = new THREE.SphereGeometry(0.2, 32, 32);
+  const debugSphere = new THREE.Mesh(sphereGeo, cameraMaterial);
+  debugSphere.position.set(0, 0, 0);
+  debugSphere.visible = false;
+  debugSphere.name = "debugSphere";
+  scene.add(debugSphere);
+
+  const sphereTc = new TransformControls(camera, renderer.domElement);
+  sphereTc.setMode('translate');
+  sphereTc.showY = false;
+  sphereTc.attach(debugSphere);
+  const sphereHelper = sphereTc.getHelper();
+  sphereHelper.name = "sphereTcHelper";
+  scene.add(sphereHelper);
+
+  sphereTc.addEventListener('change', () => {
+    const db = scene.getObjectByName("debugSphere");
+    const cam = scene.getObjectByName("matrixCamera");
+    const nPixels = getNpix();
+    const vWorld = new THREE.Vector4(db.position.x, db.position.y, db.position.z, 1);
+    const modelPos =  vWorld.clone().applyMatrix4(db.matrixWorld.clone().invert());
+    const vView =  vWorld.clone().applyMatrix4(cam.matrixWorld.clone().invert());
+    const vClip = vView.clone().applyMatrix4(cam.projectionMatrix);
+    const vNdc = applyPerspDiv(vClip.clone());
+    const vWin = new THREE.Vector2((vNdc.x+1)/ 2* nPixels, (vNdc.y+1)/ 2 * nPixels);
+    document.getElementById("coord-model").value = `(${modelPos.x.toFixed(2)}, ${modelPos.y.toFixed(2)}, ${modelPos.z.toFixed(2)})`;
+    document.getElementById("coord-world").value = `(${vWorld.x.toFixed(2)}, ${vWorld.y.toFixed(2)}, ${vWorld.z.toFixed(2)})`;
+    document.getElementById("coord-view").value = `(${vView.x.toFixed(2)}, ${vView.y.toFixed(2)}, ${vView.z.toFixed(2)})`;
+    document.getElementById("coord-clip").value = `(${vClip.x.toFixed(2)}, ${vClip.y.toFixed(2)}, ${vClip.z.toFixed(2)})`;
+    document.getElementById("coord-ndc").value = `(${vNdc.x.toFixed(2)}, ${vNdc.y.toFixed(2)}, ${vNdc.z.toFixed(2)})`;
+    document.getElementById("coord-window").value = `(${vWin.x.toFixed(0)}px, ${vWin.y.toFixed(0)}px)`;
+  });
+
+  const showp = document.getElementById("show-point");
+  showp.addEventListener('change', (e) => {
+    const db = scene.getObjectByName("debugSphere");
+    const sh = scene.getObjectByName("sphereTcHelper");
+    db.visible = getSphVis();
+    sh.controls.showX = getSphVis();
+    sh.controls.showZ = getSphVis();
+  });
+  showp.dispatchEvent(new Event('change'));
+
+
   // -------------------------------------- DEFINE TRANSFORMS --------------------------------------
   const applyPerspDiv = (vec) => {
     // Remember which side of w = 0 the point was on (w < 0 means it ends up behind the camera)
@@ -531,9 +588,18 @@
     const projInverse = cam.projectionMatrix.clone().invert();
   
     // NDC to view
-    if (space > 4) res.applyMatrix4(projInverse);
-    if (space > 4) res = applyPerspDiv(res);
-    if (space == 4) res.applyMatrix4(cam.projectionMatrix);
+    if (space === 4 && cam.isPerspectiveCamera) {
+      const proj = cam.projectionMatrix.elements;
+      const p22 = proj[10]; // -(far + near) / (far - near)
+      const p23 = proj[14]; // -(2 * far * near) / (far - near)
+      const wClip = (p23 - res.z) / p22;
+
+      // Construct the true 4D clip vector (x, y, z, w)
+      res = applyPerspDiv(new THREE.Vector4(res.x, res.y, res.z, wClip));
+    }
+
+    if (space >= 4) res.applyMatrix4(projInverse);
+    if (space >= 4) res = applyPerspDiv(res);
 
     // View to world
     if (space > 2) res.applyMatrix4(viewInverse);
@@ -588,7 +654,7 @@
         const z = j < divisions ? gridValue(j,offset.y) : size + offset.y;
         const cur = applyMat(new THREE.Vector4(x, 0, z, 1),space);
         // Consecutive samples on opposite sides of w = 0 are on opposite sides of infinity: don't join them
-        if (prev && prev.wSign === cur.wSign) {
+        if (prev && (prev.wSign === cur.wSign || space != 5)) {
           positions.push(prev.x, prev.y, prev.z, cur.x, cur.y, cur.z);
         }
         prev = cur;
